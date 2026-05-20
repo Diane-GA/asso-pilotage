@@ -1,22 +1,19 @@
 import StatCard from "@/components/StatCard"
-import { UserX, Euro, BookOpen, Megaphone, UserCog } from "lucide-react"
-import { absences, finances, ateliers, communication, membres } from "@/lib/mock-data"
+import { Euro, BookOpen, Megaphone, UserCog } from "lucide-react"
+import { finances, ateliers, communication, membres } from "@/lib/mock-data"
 
 function todayFr() {
   return new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
 }
 
 export default function DashboardPage() {
-  // Derive ateliers stats from sessions (mock-data refactorisé)
   const ateliersSallesNonConfirmees = ateliers.sessions.filter(
     (s) => s.salle === "À confirmer" && s.statut !== "terminé"
   ).length
   const ateliersCetteSemaine = ateliers.sessions.filter((s) => s.statut === "planifié").length
-
   const membresEnAttente = membres.liste.filter((m) => m.statut === "en attente").length
 
   const totalAlertes =
-    absences.stats.nonJustifiees +
     finances.demandes.filter((d) => d.statut === "à compléter").length +
     ateliersSallesNonConfirmees +
     communication.calendrier.filter((p) => p.statut === "à créer").length +
@@ -35,22 +32,6 @@ export default function DashboardPage() {
       </header>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        <StatCard
-          title="Absences"
-          icon={UserX}
-          accentClass="bg-absences-light"
-          iconClass="text-absences-dark"
-          borderClass="border-absences"
-          alerts={absences.stats.nonJustifiees}
-          href="/absences"
-          cta="Gérer les absences"
-          stats={[
-            { label: "Absents aujourd'hui", value: absences.stats.total },
-            { label: "Non justifiées", value: absences.stats.nonJustifiees, highlight: absences.stats.nonJustifiees > 0 },
-            { label: "Appels effectués", value: `${absences.stats.appelsEffectues}/${absences.stats.nonJustifiees}` },
-          ]}
-        />
-
         <StatCard
           title="Finances"
           icon={Euro}
@@ -78,7 +59,7 @@ export default function DashboardPage() {
           cta="Organiser les ateliers"
           stats={[
             { label: "Ateliers planifiés", value: ateliersCetteSemaine },
-            { label: "Bénéficiaires", value: ateliers.beneficiaires.filter((b) => b.statut === "actif").length },
+            { label: "Bénéficiaires actifs", value: ateliers.beneficiaires.filter((b) => b.statut === "actif").length },
             { label: "Salle non confirmée", value: ateliersSallesNonConfirmees, highlight: ateliersSallesNonConfirmees > 0 },
           ]}
         />
