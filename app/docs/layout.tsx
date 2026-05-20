@@ -25,7 +25,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
     )
   }
 
-  if (user?.role !== "super_admin") {
+  if (user?.role !== "super_admin" && user?.role !== "admin") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
         <div className="text-center max-w-md">

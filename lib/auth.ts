@@ -47,7 +47,24 @@ function saveUsers(users: (AuthUser & { pwd: string })[]) {
 export function ensureDefaultAdmin() {
   if (typeof window === "undefined") return
   const users = loadUsers()
-  if (users.find((u) => u.email === "admin@asso.fr")) return
+  const existing = users.find((u) => u.email === "admin@asso.fr")
+
+  if (existing) {
+    // Migration : upgrader admin → super_admin si nécessaire
+    if (existing.role === "admin") {
+      const updated = users.map((u) =>
+        u.email === "admin@asso.fr" ? { ...u, role: "super_admin" as Role } : u
+      )
+      saveUsers(updated)
+      // Mettre à jour la session active si c'est ce compte
+      const session = getSession()
+      if (session?.email === "admin@asso.fr") {
+        localStorage.setItem(STORAGE_SESSION, JSON.stringify({ ...session, role: "super_admin" }))
+      }
+    }
+    return
+  }
+
   const admin: AuthUser & { pwd: string } = {
     id: "admin-default",
     email: "admin@asso.fr",
