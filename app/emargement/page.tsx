@@ -15,7 +15,11 @@ interface Session {
   beneficiaireIds: number[]; statut: string
 }
 interface Beneficiaire {
-  id: number; prenom: string; nom: string; telephone: string; niveau: string; statut: string
+  id: number; prenom: string; nom: string
+  telephone: string
+  nomParent: string; telephoneParent: string
+  dateNaissance?: string; noteEvaluation?: number | null
+  niveau: string; statut: string
 }
 
 // ──────────────────────────────────────────────
@@ -198,10 +202,19 @@ export default function EmargementPage() {
                             </span>
                           )}
                         </div>
-                        {status === "absent" && b.telephone && (
-                          <a href={`tel:${b.telephone.replace(/\s/g, "")}`} className="text-xs text-absences-dark underline underline-offset-2 mt-0.5 block">
-                            {b.telephone}
-                          </a>
+                        {status === "absent" && (
+                          <div className="mt-0.5 space-y-0.5">
+                            {b.telephoneParent && (
+                              <a href={`tel:${b.telephoneParent.replace(/\s/g, "")}`} className="text-xs text-absences-dark underline underline-offset-2 block">
+                                {b.nomParent} · {b.telephoneParent}
+                              </a>
+                            )}
+                            {!b.telephoneParent && b.telephone && (
+                              <a href={`tel:${b.telephone.replace(/\s/g, "")}`} className="text-xs text-absences-dark underline underline-offset-2 block">
+                                {b.telephone}
+                              </a>
+                            )}
+                          </div>
                         )}
                       </div>
                       <button
@@ -234,18 +247,28 @@ export default function EmargementPage() {
               <p className="text-xs text-absences-dark/60 italic">Aucun appel nécessaire</p>
             ) : (
               <ul className="space-y-3">
-                {aAppeler.map(b => (
-                  <li key={b.id}>
-                    <p className="text-sm font-medium text-absences-dark">{b.prenom} {b.nom}</p>
-                    {b.telephone ? (
-                      <a href={`tel:${b.telephone.replace(/\s/g, "")}`} className="text-xs text-absences-dark/80 underline underline-offset-2">
-                        {b.telephone}
-                      </a>
-                    ) : (
-                      <span className="text-xs text-absences-dark/50 italic">Pas de téléphone</span>
-                    )}
-                  </li>
-                ))}
+                {aAppeler.map(b => {
+                  const contact = b.telephoneParent
+                    ? { nom: b.nomParent || "Parent", tel: b.telephoneParent }
+                    : b.telephone
+                      ? { nom: `${b.prenom} ${b.nom}`, tel: b.telephone }
+                      : null
+                  return (
+                    <li key={b.id}>
+                      <p className="text-sm font-medium text-absences-dark">{b.prenom} {b.nom}</p>
+                      {contact ? (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-absences-dark/60">{contact.nom}</span>
+                          <a href={`tel:${contact.tel.replace(/\s/g, "")}`} className="text-xs text-absences-dark/80 underline underline-offset-2">
+                            {contact.tel}
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-absences-dark/50 italic">Aucun contact renseigné</span>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
