@@ -5,7 +5,7 @@ import { ateliers as ateliersMock, benevoles as benevolesMock } from "@/lib/mock
 import Link from "next/link"
 import {
   Plus, Pencil, CalendarDays, Users, UserCheck, ClipboardCheck,
-  GraduationCap, X, Phone, Columns3,
+  X, Columns3,
 } from "lucide-react"
 import SlideOver, {
   Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton,
@@ -93,20 +93,6 @@ const typeGroupeStyle: Record<TypeGroupe, string> = {
   "mixte":  "bg-communication-light text-communication-dark",
 }
 
-function deriveNiveau(note: number | null): NiveauBenef {
-  if (note === null) return "débutant"
-  if (note <= 10) return "débutant"
-  if (note <= 16) return "intermédiaire"
-  return "avancé"
-}
-
-function noteColor(note: number | null): string {
-  if (note === null) return "bg-slate-100 text-slate-500"
-  if (note <= 7)  return "bg-red-100 text-red-700"
-  if (note <= 13) return "bg-orange-100 text-orange-700"
-  return "bg-green-100 text-green-700"
-}
-
 function computeAge(dateNaissance: string): number {
   return new Date().getFullYear() - new Date(dateNaissance).getFullYear()
 }
@@ -122,13 +108,6 @@ const emptySession = (): Omit<Session, "id"> => ({
   titre: "", description: "", date: new Date().toISOString().split("T")[0],
   heure: "14h00", duree: "2h", salle: "", formatrice: "",
   beneficiaireIds: [], benevoleIds: [], statut: "planifié",
-})
-
-const emptyBenef = (): Omit<Beneficiaire, "id"> => ({
-  prenom: "", nom: "", dateNaissance: "", email: "", telephone: "",
-  nomParent: "", telephoneParent: "", emailParent: "",
-  dateInscription: new Date().toISOString().split("T")[0],
-  noteEvaluation: null, niveau: "débutant", notes: "", statut: "actif",
 })
 
 const emptyGroupe = (): Omit<Groupe, "id"> => ({
@@ -388,138 +367,11 @@ function GroupesTab({
 }
 
 // ══════════════════════════════════════════════
-// ONGLET BÉNÉFICIAIRES
-// ══════════════════════════════════════════════
-function BeneficiairesTab({
-  beneficiaires, sessions, groupes, onEdit,
-}: {
-  beneficiaires: Beneficiaire[]
-  sessions: Session[]
-  groupes: Groupe[]
-  onEdit: (b: Beneficiaire) => void
-}) {
-  function getSessionCount(id: number): number {
-    return sessions.filter(s => s.beneficiaireIds.includes(id)).length
-  }
-
-  function getAbsenceCount(id: number): number {
-    let absences = 0
-    sessions
-      .filter(s => s.beneficiaireIds.includes(id) && s.statut === "terminé")
-      .forEach(s => {
-        const presences: Record<number, boolean> = load(S_PRESENCES(s.id), {})
-        if (presences[id] === false) absences++
-      })
-    return absences
-  }
-
-  function getMemberGroupes(id: number): Groupe[] {
-    return groupes.filter(g => g.beneficiaireIds.includes(id))
-  }
-
-  return (
-    <section className="bg-surface rounded-xl border border-border overflow-hidden">
-      <div className="px-5 py-3 border-b border-border">
-        <h2 className="font-semibold text-foreground text-sm">
-          {beneficiaires.length} bénéficiaire{beneficiaires.length > 1 ? "s" : ""}
-        </h2>
-      </div>
-      {beneficiaires.length === 0 ? (
-        <p className="text-center text-sm text-muted py-8 italic">Aucun bénéficiaire</p>
-      ) : (
-        <ul className="divide-y divide-border">
-          {beneficiaires.map(b => {
-            const sessionCount = getSessionCount(b.id)
-            const absenceCount = getAbsenceCount(b.id)
-            const memberGroupes = getMemberGroupes(b.id)
-            const age = b.dateNaissance ? computeAge(b.dateNaissance) : null
-
-            return (
-              <li key={b.id} className="px-5 py-4 flex items-start gap-4 hover:bg-slate-50 group">
-                {/* Avatar */}
-                <div className="w-10 h-10 rounded-full bg-ateliers-light flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-ateliers-dark">{initials(b.prenom, b.nom)}</span>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  {/* Name + age + statut */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-foreground text-sm">{b.prenom} {b.nom}</p>
-                    {age !== null && <span className="text-xs text-muted">{age} ans</span>}
-                    {b.statut !== "actif" && (
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{b.statut}</span>
-                    )}
-                  </div>
-
-                  {/* Évaluation + niveau */}
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    {b.noteEvaluation !== null && (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${noteColor(b.noteEvaluation)}`}>
-                        {b.noteEvaluation}/20
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${niveauStyle[b.niveau]}`}>
-                      {b.niveau}
-                    </span>
-                  </div>
-
-                  {/* Parent contact */}
-                  {b.nomParent && (
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <p className="text-xs text-muted">{b.nomParent}</p>
-                      {b.telephoneParent && (
-                        <a
-                          href={`tel:${b.telephoneParent}`}
-                          className="flex items-center gap-1 text-xs text-ateliers-dark hover:underline"
-                        >
-                          <Phone size={10} /> {b.telephoneParent}
-                        </a>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Notes */}
-                  {b.notes && (
-                    <p className="text-xs text-slate-400 italic mt-1 line-clamp-2">{b.notes}</p>
-                  )}
-
-                  {/* Stats + groupes */}
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                    <span className="text-[10px] text-muted">
-                      {sessionCount} atelier{sessionCount > 1 ? "s" : ""}{absenceCount > 0 ? ` · ${absenceCount} absence${absenceCount > 1 ? "s" : ""}` : ""}
-                    </span>
-                    {memberGroupes.map(g => (
-                      <span key={g.id} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                        {g.nom}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Edit */}
-                <button
-                  onClick={() => onEdit(b)}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                >
-                  <Pencil size={13} />
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-// ══════════════════════════════════════════════
 // PAGE PRINCIPALE
 // ══════════════════════════════════════════════
 const TABS = [
-  { id: "ateliers",      label: "Ateliers",      icon: CalendarDays },
-  { id: "groupes",       label: "Groupes",        icon: Columns3 },
-  { id: "beneficiaires", label: "Bénéficiaires",  icon: Users },
+  { id: "ateliers", label: "Ateliers", icon: CalendarDays },
+  { id: "groupes",  label: "Groupes",  icon: Columns3 },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -541,9 +393,6 @@ export default function AteliersPage() {
 
   // ── Bénéficiaires ──
   const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[]>(ateliersMock.beneficiaires as Beneficiaire[])
-  const [benefSlide, setBenefSlide]     = useState(false)
-  const [editingBenef, setEditingBenef] = useState<Beneficiaire | null>(null)
-  const [benefForm, setBenefForm]       = useState<Omit<Beneficiaire, "id">>(emptyBenef())
 
   // ── Bénévoles (read-only) ──
   const benevoles = benevolesMock.liste
@@ -638,41 +487,10 @@ export default function AteliersPage() {
     persistGroupes(groupes.map(g => g.id === groupeId ? { ...g, beneficiaireIds } : g))
   }
 
-  // ── Bénéficiaires CRUD ──
-  function persistBenef(data: Beneficiaire[]) {
-    setBeneficiaires(data)
-    localStorage.setItem(S_BENEF, JSON.stringify(data))
-  }
-  function openNewBenef() {
-    setEditingBenef(null); setBenefForm(emptyBenef()); setBenefSlide(true)
-  }
-  function openEditBenef(b: Beneficiaire) {
-    setEditingBenef(b); setBenefForm({ ...b }); setBenefSlide(true)
-  }
-  function handleSaveBenef() {
-    const updated = editingBenef
-      ? beneficiaires.map(x => x.id === editingBenef.id ? { ...benefForm, id: editingBenef.id } : x)
-      : [...beneficiaires, { ...benefForm, id: Date.now() }]
-    persistBenef(updated); setBenefSlide(false)
-  }
-  function handleDeleteBenef() {
-    if (!editingBenef) return
-    persistBenef(beneficiaires.filter(x => x.id !== editingBenef.id))
-    setBenefSlide(false)
-  }
-
   // ── Derived stats ──
   const aVenir         = sessions.filter(s => s.statut === "planifié" || s.statut === "en cours").length
   const benefActifs    = beneficiaires.filter(b => b.statut === "actif").length
   const groupesCount   = groupes.length
-
-  // Derive niveau hint in benef form
-  const suggestedNiveau = deriveNiveau(benefForm.noteEvaluation)
-  const niveauHintLabel: Record<NiveauBenef, string> = {
-    "débutant":      "Débutant",
-    "intermédiaire": "Intermédiaire",
-    "avancé":        "Avancé",
-  }
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -680,7 +498,7 @@ export default function AteliersPage() {
       <header className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Ateliers</h1>
-          <p className="text-sm text-muted mt-1">Gestion des sessions, groupes et bénéficiaires</p>
+          <p className="text-sm text-muted mt-1">Gestion des sessions et des groupes</p>
         </div>
         <div className="flex gap-2">
           {tab === "ateliers" && (
@@ -697,14 +515,6 @@ export default function AteliersPage() {
               className="flex items-center gap-1.5 text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors"
             >
               <Plus size={14} /> Nouveau groupe
-            </button>
-          )}
-          {tab === "beneficiaires" && (
-            <button
-              onClick={openNewBenef}
-              className="flex items-center gap-1.5 text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors"
-            >
-              <Plus size={14} /> Nouveau bénéficiaire
             </button>
           )}
         </div>
@@ -756,14 +566,6 @@ export default function AteliersPage() {
           beneficiaires={beneficiaires}
           onEdit={openEditGroupe}
           onUpdateMembers={updateGroupeMembers}
-        />
-      )}
-      {tab === "beneficiaires" && (
-        <BeneficiairesTab
-          beneficiaires={beneficiaires}
-          sessions={sessions}
-          groupes={groupes}
-          onEdit={openEditBenef}
         />
       )}
 
@@ -977,174 +779,6 @@ export default function AteliersPage() {
         </form>
       </SlideOver>
 
-      {/* ════════════════════════════════════════
-          SLIDEOVER — Bénéficiaire
-      ════════════════════════════════════════ */}
-      <SlideOver
-        open={benefSlide}
-        onClose={() => setBenefSlide(false)}
-        title={editingBenef ? `${editingBenef.prenom} ${editingBenef.nom}` : "Nouveau bénéficiaire"}
-        subtitle="Fiche d'inscription"
-        width="lg"
-      >
-        <form onSubmit={e => { e.preventDefault(); handleSaveBenef() }} className="flex flex-col gap-5">
-
-          {/* Section 1 — Identité */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <GraduationCap size={12} /> Identité
-            </p>
-            <div className="flex flex-col gap-3">
-              <FormRow>
-                <Field label="Prénom" required>
-                  <Input
-                    placeholder="Leila"
-                    value={benefForm.prenom}
-                    onChange={e => setBenefForm(f => ({ ...f, prenom: e.target.value }))}
-                  />
-                </Field>
-                <Field label="Nom" required>
-                  <Input
-                    placeholder="A."
-                    value={benefForm.nom}
-                    onChange={e => setBenefForm(f => ({ ...f, nom: e.target.value }))}
-                  />
-                </Field>
-              </FormRow>
-              <Field label="Date de naissance">
-                <Input
-                  type="date"
-                  value={benefForm.dateNaissance}
-                  onChange={e => setBenefForm(f => ({ ...f, dateNaissance: e.target.value }))}
-                />
-              </Field>
-              <FormRow>
-                <Field label="Email (optionnel si enfant)">
-                  <Input
-                    type="email"
-                    placeholder="leila@email.fr"
-                    value={benefForm.email}
-                    onChange={e => setBenefForm(f => ({ ...f, email: e.target.value }))}
-                  />
-                </Field>
-                <Field label="Téléphone (optionnel si enfant)">
-                  <Input
-                    placeholder="06 12 34 56 78"
-                    value={benefForm.telephone}
-                    onChange={e => setBenefForm(f => ({ ...f, telephone: e.target.value }))}
-                  />
-                </Field>
-              </FormRow>
-            </div>
-          </div>
-
-          {/* Section 2 — Contact parent */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Phone size={12} /> Contact parent
-            </p>
-            <div className="flex flex-col gap-3">
-              <Field label="Nom du parent" required>
-                <Input
-                  placeholder="Farida A."
-                  value={benefForm.nomParent}
-                  onChange={e => setBenefForm(f => ({ ...f, nomParent: e.target.value }))}
-                />
-              </Field>
-              <FormRow>
-                <Field label="Téléphone parent" required>
-                  <Input
-                    placeholder="06 11 22 33 44"
-                    value={benefForm.telephoneParent}
-                    onChange={e => setBenefForm(f => ({ ...f, telephoneParent: e.target.value }))}
-                  />
-                </Field>
-                <Field label="Email parent">
-                  <Input
-                    type="email"
-                    placeholder="farida@email.fr"
-                    value={benefForm.emailParent}
-                    onChange={e => setBenefForm(f => ({ ...f, emailParent: e.target.value }))}
-                  />
-                </Field>
-              </FormRow>
-            </div>
-          </div>
-
-          {/* Section 3 — Inscription */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <ClipboardCheck size={12} /> Inscription
-            </p>
-            <div className="flex flex-col gap-3">
-              <Field label="Date d'inscription">
-                <Input
-                  type="date"
-                  value={benefForm.dateInscription}
-                  onChange={e => setBenefForm(f => ({ ...f, dateInscription: e.target.value }))}
-                />
-              </Field>
-              <Field label="Note d'évaluation (0–20)">
-                <div className="flex items-center gap-3">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={20}
-                    placeholder="—"
-                    value={benefForm.noteEvaluation ?? ""}
-                    onChange={e => {
-                      const val = e.target.value === "" ? null : Number(e.target.value)
-                      setBenefForm(f => ({ ...f, noteEvaluation: val }))
-                    }}
-                    className="w-24"
-                  />
-                  {benefForm.noteEvaluation !== null && (
-                    <span className="text-xs text-muted">
-                      → Niveau suggéré : <strong>{niveauHintLabel[suggestedNiveau]}</strong>
-                    </span>
-                  )}
-                </div>
-              </Field>
-              <FormRow>
-                <Field label="Niveau">
-                  <Select
-                    value={benefForm.niveau}
-                    onChange={e => setBenefForm(f => ({ ...f, niveau: e.target.value as NiveauBenef }))}
-                  >
-                    <option value="débutant">Débutant</option>
-                    <option value="intermédiaire">Intermédiaire</option>
-                    <option value="avancé">Avancé</option>
-                  </Select>
-                </Field>
-                <Field label="Statut">
-                  <Select
-                    value={benefForm.statut}
-                    onChange={e => setBenefForm(f => ({ ...f, statut: e.target.value as StatutBenef }))}
-                  >
-                    <option value="actif">Actif</option>
-                    <option value="diplômé">Diplômé</option>
-                    <option value="abandon">Abandon</option>
-                  </Select>
-                </Field>
-              </FormRow>
-            </div>
-          </div>
-
-          {/* Section 4 — Notes */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Notes</p>
-            <Textarea
-              rows={4}
-              placeholder="Niveau, objectifs, besoins particuliers, contexte de vie…"
-              value={benefForm.notes}
-              onChange={e => setBenefForm(f => ({ ...f, notes: e.target.value }))}
-            />
-          </div>
-
-          <SaveButton />
-          {editingBenef && <DeleteButton onClick={handleDeleteBenef} />}
-        </form>
-      </SlideOver>
     </div>
   )
 }
