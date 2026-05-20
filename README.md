@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Asso Pilotage
 
-## Getting Started
+Dashboard de pilotage pour une association de formation numérique.
+**Next.js 16 · Tailwind v4 · TypeScript · localStorage**
 
-First, run the development server:
+🌐 **Production** : [asso-inky.vercel.app](https://asso-inky.vercel.app)
+📦 **Repo** : [github.com/anais0210/asso-pilotage](https://github.com/anais0210/asso-pilotage)
+
+---
+
+## Démarrage rapide
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev -- --port 3001   # http://localhost:3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Compte démo : `admin@asso.fr` / `admin1234`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Documentation (Diataxis)
 
-## Learn More
+La documentation suit le framework [Diataxis](https://diataxis.fr) — quatre quadrants distincts.
 
-To learn more about Next.js, take a look at the following resources:
+### 📚 Tutorials — Apprendre pas à pas
+Pour comprendre le projet et faire sa première contribution.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Prise en main du projet](docs/tutorials/getting-started.md)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 🔧 How-to — Recettes pratiques
+Pour accomplir une tâche précise, quand on sait ce qu'on veut faire.
 
-## Deploy on Vercel
+- [Ajouter un nouveau module](docs/how-to/add-new-module.md)
+- [Ajouter le CRUD à un module](docs/how-to/add-crud-to-module.md)
+- [Déployer sur Vercel](docs/how-to/deploy.md)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 📖 Reference — Référence technique
+Pour savoir comment quelque chose fonctionne.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Architecture générale](docs/reference/architecture.md)
+- [Composants partagés (SlideOver, Sidebar…)](docs/reference/components.md)
+- [Tokens de couleur Tailwind](docs/reference/color-tokens.md)
+- [Modèles de données](docs/reference/data-models.md)
+
+### 💡 Explanation — Décisions & contexte
+Pour comprendre pourquoi les choses sont faites ainsi.
+
+- [ADR 001 — Pas de backend (localStorage first)](docs/explanation/adr/001-no-backend.md)
+- [ADR 002 — Tailwind v4 CSS-first](docs/explanation/adr/002-tailwind-v4-css-first.md)
+- [ADR 003 — Auth localStorage](docs/explanation/adr/003-auth-localstorage.md)
+
+---
+
+## Modules
+
+| Module | URL | Description |
+|---|---|---|
+| Vue d'ensemble | `/dashboard` | KPIs globaux, alertes |
+| Émargement | `/emargement` | Présences par séance |
+| Absences | `/absences` | Suivi + appels parents |
+| Finances | `/finances` | Demandes + inscriptions |
+| Ateliers | `/ateliers` | Planning, notes, groupes |
+| Communication | `/communication` | Calendrier éditorial + kanban |
+| Bénévoles | `/benevoles` | Disponibilités + événements |
+| Membres | `/membres` | Annuaire équipe |
+| Roadmap | `/roadmap` | Matrice impact/facilité |
+
+---
+
+## Pour les assistants IA
+
+Lire dans cet ordre avant de coder :
+1. `CLAUDE.md` — contexte projet, conventions, pièges
+2. `AGENTS.md` — avertissements techniques stack
+3. `docs/how-to/add-new-module.md` — si ajout de module
