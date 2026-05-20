@@ -5,12 +5,61 @@ import { usePathname } from "next/navigation"
 import { BookOpen, ChevronRight } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
-const docLinks = [
-  { href: "/docs",             label: "Sommaire" },
-  { href: "/docs/apprenantes", label: "Apprenantes" },
-  { href: "/docs/demarrage",   label: "Démarrage" },
-  { href: "/docs/gitflow",     label: "Gitflow" },
-  { href: "/docs/livraison",   label: "Livraison" },
+type DocLink = { href: string; label: string }
+type DocSection = { title: string; links: DocLink[] }
+
+const docSections: DocSection[] = [
+  {
+    title: "Général",
+    links: [
+      { href: "/docs", label: "Sommaire" },
+    ],
+  },
+  {
+    title: "Guides utilisateur",
+    links: [
+      { href: "/docs/apprenantes", label: "Apprenantes" },
+    ],
+  },
+  {
+    title: "Tutoriels",
+    links: [
+      { href: "/docs/demarrage",                    label: "Démarrage rapide" },
+      { href: "/docs/tutoriels/getting-started",    label: "Premier pas" },
+    ],
+  },
+  {
+    title: "How-to",
+    links: [
+      { href: "/docs/how-to/nouveau-module", label: "Nouveau module" },
+      { href: "/docs/how-to/crud-module",    label: "CRUD module" },
+      { href: "/docs/how-to/deployer",       label: "Déployer" },
+    ],
+  },
+  {
+    title: "Référence",
+    links: [
+      { href: "/docs/reference/architecture", label: "Architecture" },
+      { href: "/docs/reference/couleurs",     label: "Couleurs" },
+      { href: "/docs/reference/composants",   label: "Composants" },
+    ],
+  },
+  {
+    title: "ADR",
+    links: [
+      { href: "/docs/adr/001-no-backend",    label: "001 – No backend" },
+      { href: "/docs/adr/002-tailwind",      label: "002 – Tailwind v4" },
+      { href: "/docs/adr/003-auth",          label: "003 – Auth" },
+      { href: "/docs/adr/004-google-sheets", label: "004 – Google Sheets" },
+    ],
+  },
+  {
+    title: "Équipe",
+    links: [
+      { href: "/docs/gitflow",   label: "Gitflow" },
+      { href: "/docs/livraison", label: "Livraison" },
+    ],
+  },
 ]
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
@@ -66,25 +115,28 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
             Dashboard
           </Link>
 
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">Guides</p>
-
-          {docLinks.map(({ href, label }) => {
-            const active = pathname === href
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-slate-100 text-slate-700 font-semibold"
-                    : "text-muted hover:bg-slate-50 hover:text-foreground"
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-slate-500" : "bg-border"}`} />
-                {label}
-              </Link>
-            )
-          })}
+          {docSections.map(({ title, links }) => (
+            <div key={title} className="mb-2">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">{title}</p>
+              {links.map(({ href, label }) => {
+                const active = pathname === href
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-slate-100 text-slate-700 font-semibold"
+                        : "text-muted hover:bg-slate-50 hover:text-foreground"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-slate-500" : "bg-border"}`} />
+                    {label}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 
