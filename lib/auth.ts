@@ -111,3 +111,63 @@ export const ROLE_LABELS: Record<Role, string> = {
   coordinatrice:  "Coordinatrice",
   benevole:       "Bénévole",
 }
+
+// ── Admin API ─────────────────────────────────
+
+export function getAllUsers(): AuthUser[] {
+  return loadUsers().map(({ pwd: _pwd, ...user }) => user)
+}
+
+export function updateUser(
+  id: string,
+  data: { nom?: string; prenom?: string; email?: string; role?: Role; password?: string }
+): { ok: boolean; error?: string } {
+  const users = loadUsers()
+  const idx = users.findIndex((u) => u.id === id)
+  if (idx === -1) return { ok: false, error: "Utilisateur introuvable." }
+
+  if (data.email) {
+    const conflict = users.find(
+      (u) => u.email.toLowerCase() === data.email!.toLowerCase() && u.id !== id
+    )
+    if (conflict) return { ok: false, error: "Cet email est déjà utilisé." }
+  }
+
+  const { password: newPwd, ...rest } = data
+  users[idx] = {
+    ...users[idx],
+    ...rest,
+    ...(newPwd ? { pwd: hashPwd(newPwd) } : {}),
+  }
+  saveUsers(users)
+
+  // Rafraîchir la session si c'est l'utilisateur courant
+  if (typeof window !== "undefined") {
+    const session = getSession()
+    if (session?.id === id) {
+      const { pwd: _pwd, ...sessionData } = users[idx]
+      localStorage.setItem(STORAGE_SESSION, JSON.stringify(sessionData))
+    }
+  }
+  return { ok: true }
+}
+
+export function deleteUser(id: string): { ok: boolean; error?: string } {
+  const users = loadUsers()
+  const idx = users.findIndex((u) => u.id === id)
+  if (idx === -1) return { ok: false, error: "Utilisateur introuvable." }
+
+  const admins = users.filter((u) => u.role === "admin")
+  if (admins.length === 1 && users[idx].role === "admin") {
+    return { ok: false, error: "Impossible de supprimer le dernier administrateur." }
+  }
+
+  saveUsers(users.filter((u) => u.id !== id))
+
+  // Déconnecter si on supprime son propre compte
+  if (typeof window !== "undefined") {
+    const session = getSession()
+    if (session?.id === id) localStorage.removeItem(STORAGE_SESSION)
+  }
+  return { ok: true }
+}

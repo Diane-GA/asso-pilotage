@@ -1,15 +1,31 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { communication } from "@/lib/mock-data"
-import { Calendar, Columns3, Check, X, RotateCcw, Plus, Pencil } from "lucide-react"
+import { Calendar, Columns3, Check, X, RotateCcw, Plus, Pencil, CalendarDays } from "lucide-react"
 import SlideOver, { Field, Input, Textarea, Select, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
+
+const STORAGE_POSTS   = "asso-communication-posts"
+const STORAGE_EVENTS  = "asso-communication-events"
+
+function load<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback
+  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback } catch { return fallback }
+}
 
 // ──────────────────────────────────────────────
 // Types & données
 // ──────────────────────────────────────────────
 type ValidationStatus = "brouillon" | "soumis" | "approuvé" | "refusé" | "publié"
 type Plateforme = "LinkedIn" | "Instagram" | "Facebook"
+type TypeEvenement = "atelier" | "événement" | "cérémonie"
+
+interface Evenement {
+  id: number
+  nom: string
+  date: string
+  type: TypeEvenement
+}
 
 interface Post {
   id: number
@@ -53,7 +69,7 @@ const plateformeStyle: Record<Plateforme, string> = {
 // ──────────────────────────────────────────────
 // Calendrier éditorial (4.1)
 // ──────────────────────────────────────────────
-function CalendrierTab({ posts }: { posts: Post[] }) {
+function CalendrierTab({ posts, evenements }: { posts: Post[]; evenements: Evenement[] }) {
   const today = new Date("2026-05-20")
   const year = today.getFullYear()
   const month = today.getMonth()
@@ -76,7 +92,7 @@ function CalendrierTab({ posts }: { posts: Post[] }) {
     return map
   }, [posts])
 
-  const events = communication.evenements.filter((e) => {
+  const events = evenements.filter((e) => {
     const d = new Date(e.date)
     return d.getFullYear() === year && d.getMonth() === month
   })
@@ -135,13 +151,77 @@ function CalendrierTab({ posts }: { posts: Post[] }) {
       </div>
 
       {/* Légende événements */}
-      {communication.evenements.length > 0 && (
+      {evenements.length > 0 && (
         <div className="flex gap-3 flex-wrap text-xs text-muted pt-2">
-          {communication.evenements.map((e) => (
+          {evenements.map((e) => (
             <span key={e.id} className="flex items-center gap-1.5 bg-absences-light text-absences-dark px-2 py-1 rounded-full">
               📅 {e.nom} · {new Date(e.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
             </span>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// Onglet Événements — CRUD
+// ──────────────────────────────────────────────
+const TYPE_OPTIONS: { value: TypeEvenement; label: string; cls: string }[] = [
+  { value: "atelier",     label: "Atelier",     cls: "bg-ateliers-light text-ateliers-dark" },
+  { value: "événement",   label: "Événement",   cls: "bg-communication-light text-communication-dark" },
+  { value: "cérémonie",   label: "Cérémonie",   cls: "bg-finances-light text-finances-dark" },
+]
+
+function EventsTab({ events, onEdit, onNew }: {
+  events: Evenement[]
+  onEdit: (e: Evenement) => void
+  onNew: () => void
+}) {
+  const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date))
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted">Ces événements apparaissent dans le calendrier éditorial et peuvent être liés aux posts.</p>
+        <button onClick={onNew} className="flex items-center gap-1.5 text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors">
+          <Plus size={14} /> Nouvel événement
+        </button>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="text-center py-16 text-muted text-sm">
+          <CalendarDays size={32} className="mx-auto mb-3 opacity-30" />
+          Aucun événement. Commencez par en créer un.
+        </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          {sorted.map((e, i) => {
+            const typeOpt = TYPE_OPTIONS.find((t) => t.value === e.type) ?? TYPE_OPTIONS[1]
+            return (
+              <div key={e.id} className={`flex items-center gap-4 px-5 py-4 group hover:bg-slate-50 transition-colors ${i > 0 ? "border-t border-border" : ""}`}>
+                <div className="text-center min-w-12 shrink-0">
+                  <p className="text-lg font-bold text-foreground leading-none">
+                    {new Date(e.date).toLocaleDateString("fr-FR", { day: "numeric" })}
+                  </p>
+                  <p className="text-[10px] text-muted uppercase tracking-wide">
+                    {new Date(e.date).toLocaleDateString("fr-FR", { month: "short" })}
+                  </p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{e.nom}</p>
+                </div>
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${typeOpt.cls}`}>
+                  {typeOpt.label}
+                </span>
+                <button
+                  onClick={() => onEdit(e)}
+                  className="p-1.5 rounded-lg hover:bg-slate-200 text-muted opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -296,24 +376,47 @@ function KanbanTab({ posts, onChangeStatus, onEdit, onRead }: {
 // ──────────────────────────────────────────────
 // Page principale
 // ──────────────────────────────────────────────
+const eventsInitiaux: Evenement[] = communication.evenements as Evenement[]
+
 const emptyPost = (): Omit<Post, "id"> => ({
   date: new Date().toISOString().split("T")[0],
   titre: "", contenu: "", plateforme: ["Instagram"],
   statut: "brouillon", auteur: "", evenement: null,
 })
 
+const emptyEvent = (): Omit<Evenement, "id"> => ({
+  nom: "", date: new Date().toISOString().split("T")[0], type: "événement",
+})
+
 const ALL_PLATEFORMES: Plateforme[] = ["LinkedIn", "Instagram", "Facebook"]
 
 export default function CommunicationPage() {
-  const [tab, setTab] = useState<"calendrier" | "kanban">("calendrier")
+  const [tab, setTab] = useState<"calendrier" | "kanban" | "evenements">("calendrier")
+
+  // Posts
   const [posts, setPosts] = useState<Post[]>(postsInitiaux)
   const [slideOpen, setSlideOpen] = useState(false)
   const [editing, setEditing] = useState<Post | null>(null)
   const [form, setForm] = useState<Omit<Post, "id">>(emptyPost())
   const [viewingPost, setViewingPost] = useState<Post | null>(null)
 
+  // Événements
+  const [events, setEvents] = useState<Evenement[]>(eventsInitiaux)
+  const [eventSlideOpen, setEventSlideOpen] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<Evenement | null>(null)
+  const [eventForm, setEventForm] = useState<Omit<Evenement, "id">>(emptyEvent())
+
+  useEffect(() => {
+    setPosts(load(STORAGE_POSTS, postsInitiaux))
+    setEvents(load(STORAGE_EVENTS, eventsInitiaux))
+  }, [])
+
+  function persistPosts(data: Post[]) { setPosts(data); localStorage.setItem(STORAGE_POSTS, JSON.stringify(data)) }
+  function persistEvents(data: Evenement[]) { setEvents(data); localStorage.setItem(STORAGE_EVENTS, JSON.stringify(data)) }
+
+  // ── Posts CRUD ────────────────────────────
   function changeStatus(id: number, status: ValidationStatus) {
-    setPosts((prev) => prev.map((p) => p.id === id ? { ...p, statut: status } : p))
+    persistPosts(posts.map((p) => p.id === id ? { ...p, statut: status } : p))
   }
 
   function openNew() { setEditing(null); setForm(emptyPost()); setSlideOpen(true) }
@@ -323,12 +426,12 @@ export default function CommunicationPage() {
     const updated = editing
       ? posts.map((p) => p.id === editing.id ? { ...form, id: editing.id } : p)
       : [...posts, { ...form, id: Date.now() }]
-    setPosts(updated); setSlideOpen(false)
+    persistPosts(updated); setSlideOpen(false)
   }
 
   function handleDelete() {
     if (!editing) return
-    setPosts(posts.filter((p) => p.id !== editing.id))
+    persistPosts(posts.filter((p) => p.id !== editing.id))
     setSlideOpen(false)
   }
 
@@ -339,6 +442,25 @@ export default function CommunicationPage() {
     }))
   }
 
+  // ── Événements CRUD ───────────────────────
+  function openNewEvent() { setEditingEvent(null); setEventForm(emptyEvent()); setEventSlideOpen(true) }
+  function openEditEvent(e: Evenement) { setEditingEvent(e); setEventForm({ nom: e.nom, date: e.date, type: e.type }); setEventSlideOpen(true) }
+
+  function handleSaveEvent() {
+    if (!eventForm.nom.trim()) return
+    const updated = editingEvent
+      ? events.map((e) => e.id === editingEvent.id ? { ...eventForm, id: editingEvent.id } : e)
+      : [...events, { ...eventForm, id: Date.now() }]
+    persistEvents(updated); setEventSlideOpen(false)
+  }
+
+  function handleDeleteEvent() {
+    if (!editingEvent) return
+    persistEvents(events.filter((e) => e.id !== editingEvent.id))
+    setEventSlideOpen(false)
+  }
+
+  // ── Stats ─────────────────────────────────
   const aCreer    = posts.filter((p) => p.statut === "brouillon" || p.statut === "soumis").length
   const approuves = posts.filter((p) => p.statut === "approuvé").length
   const publies   = posts.filter((p) => p.statut === "publié").length
@@ -350,9 +472,11 @@ export default function CommunicationPage() {
           <h1 className="text-2xl font-bold text-foreground">Communication</h1>
           <p className="text-sm text-muted mt-1">Calendrier éditorial & circuit de validation des posts</p>
         </div>
-        <button onClick={openNew} className="flex items-center gap-1.5 text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors">
-          <Plus size={14} /> Nouveau post
-        </button>
+        {tab !== "evenements" && (
+          <button onClick={openNew} className="flex items-center gap-1.5 text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors">
+            <Plus size={14} /> Nouveau post
+          </button>
+        )}
       </header>
 
       {/* SlideOver post */}
@@ -390,11 +514,35 @@ export default function CommunicationPage() {
               <Input placeholder="Nadjat" value={form.auteur} onChange={e => setForm(f => ({ ...f, auteur: e.target.value }))} />
             </Field>
             <Field label="Événement lié">
-              <Input placeholder="Ex: Portes ouvertes" value={form.evenement ?? ""} onChange={e => setForm(f => ({ ...f, evenement: e.target.value || null }))} />
+              <Select value={form.evenement ?? ""} onChange={e => setForm(f => ({ ...f, evenement: e.target.value || null }))}>
+                <option value="">— Aucun —</option>
+                {events.map((e) => <option key={e.id} value={e.nom}>{e.nom}</option>)}
+              </Select>
             </Field>
           </FormRow>
           <SaveButton />
           {editing && <DeleteButton onClick={handleDelete} />}
+        </form>
+      </SlideOver>
+
+      {/* SlideOver événement */}
+      <SlideOver open={eventSlideOpen} onClose={() => setEventSlideOpen(false)} title={editingEvent ? `Modifier — ${editingEvent.nom}` : "Nouvel événement"} width="md">
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveEvent() }} className="flex flex-col gap-4">
+          <Field label="Nom de l'événement" required>
+            <Input placeholder="Ex: Portes ouvertes" value={eventForm.nom} onChange={e => setEventForm(f => ({ ...f, nom: e.target.value }))} />
+          </Field>
+          <Field label="Date" required>
+            <Input type="date" value={eventForm.date} onChange={e => setEventForm(f => ({ ...f, date: e.target.value }))} />
+          </Field>
+          <Field label="Type">
+            <Select value={eventForm.type} onChange={e => setEventForm(f => ({ ...f, type: e.target.value as TypeEvenement }))}>
+              <option value="atelier">Atelier</option>
+              <option value="événement">Événement</option>
+              <option value="cérémonie">Cérémonie</option>
+            </Select>
+          </Field>
+          <SaveButton />
+          {editingEvent && <DeleteButton onClick={handleDeleteEvent} />}
         </form>
       </SlideOver>
 
@@ -408,8 +556,8 @@ export default function CommunicationPage() {
           <p className="text-sm text-finances-dark/70 mt-1">Approuvés à publier</p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
-          <p className="text-3xl font-bold text-foreground">{publies}</p>
-          <p className="text-sm text-muted mt-1">Publiés ce mois</p>
+          <p className="text-3xl font-bold text-foreground">{events.length}</p>
+          <p className="text-sm text-muted mt-1">Événements programmés</p>
         </div>
       </div>
 
@@ -426,10 +574,18 @@ export default function CommunicationPage() {
         >
           <Columns3 size={14} /> Validation
         </button>
+        <button
+          onClick={() => setTab("evenements")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === "evenements" ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"}`}
+        >
+          <CalendarDays size={14} /> Événements
+          <span className="text-[10px] bg-absences-light text-absences-dark px-1.5 py-0.5 rounded-full font-semibold">{events.length}</span>
+        </button>
       </div>
 
-      {tab === "calendrier" && <CalendrierTab posts={posts} />}
+      {tab === "calendrier" && <CalendrierTab posts={posts} evenements={events} />}
       {tab === "kanban"     && <KanbanTab posts={posts} onChangeStatus={changeStatus} onEdit={openEdit} onRead={(p) => setViewingPost(p)} />}
+      {tab === "evenements" && <EventsTab events={events} onEdit={openEditEvent} onNew={openNewEvent} />}
 
       <PostReadSlideOver
         post={viewingPost}

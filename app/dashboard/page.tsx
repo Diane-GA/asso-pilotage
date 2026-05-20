@@ -7,10 +7,16 @@ function todayFr() {
 }
 
 export default function DashboardPage() {
+  // Derive ateliers stats from sessions (mock-data refactorisé)
+  const ateliersSallesNonConfirmees = ateliers.sessions.filter(
+    (s) => s.salle === "À confirmer" && s.statut !== "terminé"
+  ).length
+  const ateliersCetteSemaine = ateliers.sessions.filter((s) => s.statut === "planifié").length
+
   const totalAlertes =
     absences.stats.nonJustifiees +
     finances.demandes.filter((d) => d.statut === "à compléter").length +
-    ateliers.stats.sallesNonConfirmees +
+    ateliersSallesNonConfirmees +
     communication.calendrier.filter((p) => p.statut === "à créer").length +
     (benevoles.prochainEvenement.besoins - benevoles.prochainEvenement.confirmes)
 
@@ -65,13 +71,13 @@ export default function DashboardPage() {
           accentClass="bg-ateliers-light"
           iconClass="text-ateliers-dark"
           borderClass="border-ateliers"
-          alerts={ateliers.stats.sallesNonConfirmees}
+          alerts={ateliersSallesNonConfirmees}
           href="/ateliers"
           cta="Organiser les ateliers"
           stats={[
-            { label: "Ateliers cette semaine", value: ateliers.stats.cetteSemaine },
-            { label: "Groupes à composer", value: ateliers.stats.groupesAComposer, highlight: ateliers.stats.groupesAComposer > 0 },
-            { label: "Salle non confirmée", value: ateliers.stats.sallesNonConfirmees, highlight: true },
+            { label: "Ateliers planifiés", value: ateliersCetteSemaine },
+            { label: "Bénéficiaires", value: ateliers.beneficiaires.filter((b) => b.statut === "actif").length },
+            { label: "Salle non confirmée", value: ateliersSallesNonConfirmees, highlight: ateliersSallesNonConfirmees > 0 },
           ]}
         />
 

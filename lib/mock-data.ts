@@ -31,19 +31,21 @@ export const finances = {
 }
 
 export const ateliers = {
-  stats: { cetteSemaine: 3, groupesAComposer: 2, sallesNonConfirmees: 1 },
-  prochains: [
-    { id: 1, titre: "Initiation HTML/CSS", date: "2026-05-21", heure: "14h00", salle: "Salle A", groupe: "Débutants", formatrice: "Somayeh", places: 12, inscrits: 10 },
-    { id: 2, titre: "Logique & Algorithmie", date: "2026-05-22", heure: "10h00", salle: "À confirmer", groupe: "Intermédiaires", formatrice: "Somayeh", places: 8, inscrits: 8 },
-    { id: 3, titre: "Projet web libre", date: "2026-05-24", heure: "09h30", salle: "Salle B", groupe: "Avancées", formatrice: "Nadia", places: 6, inscrits: 5 },
+  // Sessions d'ateliers
+  sessions: [
+    { id: 1, titre: "Initiation HTML/CSS", description: "Découverte des bases du web", date: "2026-05-21", heure: "14h00", duree: "2h", salle: "Salle A", formatrice: "Somayeh", beneficiaireIds: [1, 3, 4], benevoleIds: [1, 2], statut: "planifié" },
+    { id: 2, titre: "Logique & Algorithmie", description: "Résolution de problèmes et pensée computationnelle", date: "2026-05-22", heure: "10h00", duree: "2h", salle: "À confirmer", formatrice: "Somayeh", beneficiaireIds: [2, 6], benevoleIds: [4], statut: "planifié" },
+    { id: 3, titre: "Projet web libre", description: "Travaux pratiques sur projet personnel", date: "2026-05-24", heure: "09h30", duree: "3h", salle: "Salle B", formatrice: "Nadia", beneficiaireIds: [5], benevoleIds: [6], statut: "planifié" },
+    { id: 4, titre: "Initiation HTML/CSS — séance 1", description: "", date: "2026-05-07", heure: "14h00", duree: "2h", salle: "Salle A", formatrice: "Somayeh", beneficiaireIds: [1, 3, 4], benevoleIds: [1], statut: "terminé" },
   ],
-  apprenantes: [
-    { id: 1, nom: "Leila A.", groupe: "Débutants", noteLogique: 14, notePratique: 12, noteProjet: null, presences: 8, absences: 1 },
-    { id: 2, nom: "Mariam D.", groupe: "Intermédiaires", noteLogique: 16, notePratique: 17, noteProjet: 15, presences: 9, absences: 0 },
-    { id: 3, nom: "Sarah M.", groupe: "Débutants", noteLogique: 10, notePratique: 9, noteProjet: null, presences: 6, absences: 3 },
-    { id: 4, nom: "Fatima K.", groupe: "Débutants", noteLogique: 8, notePratique: 11, noteProjet: null, presences: 5, absences: 5 },
-    { id: 5, nom: "Hana T.", groupe: "Avancées", noteLogique: 18, notePratique: 19, noteProjet: 17, presences: 10, absences: 0 },
-    { id: 6, nom: "Ines C.", groupe: "Intermédiaires", noteLogique: 13, notePratique: 14, noteProjet: 12, presences: 7, absences: 2 },
+  // Bénéficiaires (anciennement apprenantes)
+  beneficiaires: [
+    { id: 1, prenom: "Leila", nom: "A.", email: "leila@email.fr", telephone: "06 11 22 33 44", dateInscription: "2026-09-10", niveau: "débutant", notes: "Aucune expérience en informatique. Très motivée. Objectif : trouver un emploi dans le web.", statut: "actif" },
+    { id: 2, prenom: "Mariam", nom: "D.", email: "mariam@email.fr", telephone: "06 22 33 44 55", dateInscription: "2026-09-10", niveau: "intermédiaire", notes: "A déjà fait du HTML en autodidacte. Bonne compréhension logique.", statut: "actif" },
+    { id: 3, prenom: "Sarah", nom: "M.", email: "sarah@email.fr", telephone: "06 33 44 55 66", dateInscription: "2026-09-15", niveau: "débutant", notes: "Reconversion professionnelle. Beaucoup d'assiduité requise — 3 absences déjà.", statut: "actif" },
+    { id: 4, prenom: "Fatima", nom: "K.", email: "fatima@email.fr", telephone: "06 44 55 66 77", dateInscription: "2026-09-15", niveau: "débutant", notes: "Barrière de la langue partielle. Besoin d'accompagnement renforcé.", statut: "actif" },
+    { id: 5, prenom: "Hana", nom: "T.", email: "hana@email.fr", telephone: "06 55 66 77 88", dateInscription: "2026-09-10", niveau: "avancé", notes: "Ancienne développeuse reconvertie. Niveau excellent. Peut aider les autres.", statut: "actif" },
+    { id: 6, prenom: "Ines", nom: "C.", email: "ines@email.fr", telephone: "06 66 77 88 99", dateInscription: "2026-09-12", niveau: "intermédiaire", notes: "Bonne progression. Intéressée par le back-end.", statut: "actif" },
   ],
 }
 

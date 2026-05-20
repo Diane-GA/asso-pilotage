@@ -111,14 +111,14 @@ export function SaveButton({ onClick, label = "Enregistrer" }: { onClick?: () =>
   )
 }
 
-export function DeleteButton({ onClick }: { onClick: () => void }) {
+export function DeleteButton({ onClick, label = "Supprimer" }: { onClick: () => void; label?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="w-full border border-alert/30 text-alert py-2 rounded-xl text-sm font-medium hover:bg-red-50 transition-colors"
     >
-      Supprimer
+      {label}
     </button>
   )
 }

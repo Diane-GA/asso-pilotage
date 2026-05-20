@@ -98,13 +98,15 @@ export default function Sidebar() {
       {user && (
         <div className="p-3 border-t border-border">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-slate-50">
-            <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-              <UserCircle size={16} className="text-slate-500" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-foreground truncate">{user.prenom} {user.nom}</p>
-              <p className="text-[10px] text-muted truncate">{ROLE_LABELS[user.role]}</p>
-            </div>
+            <Link href="/compte" className="flex items-center gap-2.5 flex-1 min-w-0 group">
+              <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0 group-hover:bg-slate-300 transition-colors">
+                <UserCircle size={16} className="text-slate-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground truncate group-hover:text-slate-900">{user.prenom} {user.nom}</p>
+                <p className="text-[10px] text-muted truncate">{ROLE_LABELS[user.role]}</p>
+              </div>
+            </Link>
             <button onClick={handleLogout} title="Se déconnecter" className="p-1 rounded hover:bg-slate-200 text-muted transition-colors">
               <LogOut size={13} />
             </button>
