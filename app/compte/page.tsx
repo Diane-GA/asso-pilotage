@@ -205,6 +205,7 @@ function AdminSection() {
   }
 
   const roleStyle: Record<Role, string> = {
+    super_admin:   "bg-slate-900 text-white",
     admin:         "bg-red-100 text-red-700",
     formatrice:    "bg-ateliers-light text-ateliers-dark",
     coordinatrice: "bg-finances-light text-finances-dark",

@@ -34,6 +34,7 @@ const statutStyle: Record<StatutMembre, string> = {
 }
 
 const roleStyle: Record<Role, string> = {
+  super_admin:   "bg-slate-900 text-white",
   admin:         "bg-communication-light text-communication-dark",
   coordinatrice: "bg-ateliers-light text-ateliers-dark",
   formatrice:    "bg-benevoles-light text-benevoles-dark",

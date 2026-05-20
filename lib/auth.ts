@@ -4,7 +4,7 @@
 // Auth système — localStorage (pas de backend)
 // ──────────────────────────────────────────────
 
-export type Role = "admin" | "formatrice" | "coordinatrice" | "benevole"
+export type Role = "super_admin" | "admin" | "formatrice" | "coordinatrice" | "benevole"
 
 export interface AuthUser {
   id: string
@@ -53,7 +53,7 @@ export function ensureDefaultAdmin() {
     email: "admin@asso.fr",
     nom: "Admin",
     prenom: "Super",
-    role: "admin",
+    role: "super_admin",
     createdAt: new Date().toISOString(),
     pwd: hashPwd("admin1234"),
   }
@@ -106,6 +106,7 @@ export function getSession(): AuthUser | null {
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
+  super_admin:    "Super Administratrice",
   admin:          "Administratrice",
   formatrice:     "Formatrice",
   coordinatrice:  "Coordinatrice",
@@ -157,8 +158,8 @@ export function deleteUser(id: string): { ok: boolean; error?: string } {
   const idx = users.findIndex((u) => u.id === id)
   if (idx === -1) return { ok: false, error: "Utilisateur introuvable." }
 
-  const admins = users.filter((u) => u.role === "admin")
-  if (admins.length === 1 && users[idx].role === "admin") {
+  const admins = users.filter((u) => u.role === "admin" || u.role === "super_admin")
+  if (admins.length === 1 && (users[idx].role === "admin" || users[idx].role === "super_admin")) {
     return { ok: false, error: "Impossible de supprimer le dernier administrateur." }
   }
 

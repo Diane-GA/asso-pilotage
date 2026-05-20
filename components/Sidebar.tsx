@@ -30,6 +30,7 @@ const navItems = [
 
 const stratItems = [
   { href: "/roadmap", label: "Roadmap stratégique", icon: Map, accent: "bg-slate-100 text-slate-700", dot: "bg-slate-600" },
+  { href: "/docs", label: "Documentation", icon: BookOpen, accent: "bg-slate-100 text-slate-700", dot: "bg-slate-500", superAdminOnly: true },
 ]
 
 export default function Sidebar() {
@@ -72,7 +73,7 @@ export default function Sidebar() {
           )
         })}
         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-3">Stratégie</p>
-        {stratItems.map(({ href, label, icon: Icon, accent, dot }) => {
+        {stratItems.filter(item => !item.superAdminOnly || user?.role === "super_admin").map(({ href, label, icon: Icon, accent, dot }) => {
           const active = pathname.startsWith(href)
           return (
             <Link
