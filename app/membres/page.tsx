@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import SlideOver, { Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
 import { Plus, Pencil, Search, UserCheck, UserX, Users } from "lucide-react"
 import { ROLE_LABELS, type Role } from "@/lib/auth"
+import { membres as membresMock } from "@/lib/mock-data"
 
 // ──────────────────────────────────────────────
 // Types
@@ -24,15 +25,7 @@ interface Membre {
 
 const STORAGE_KEY = "asso-membres"
 
-const MEMBRES_INITIAUX: Membre[] = [
-  { id: 1,  prenom: "Nadjat",   nom: "B.",     email: "nadjat@asso.fr",   telephone: "06 11 22 33 44", role: "coordinatrice", statut: "active",     dateInscription: "2024-09-01", notes: "" },
-  { id: 2,  prenom: "Somayeh",  nom: "M.",     email: "somayeh@asso.fr",  telephone: "06 22 33 44 55", role: "formatrice",    statut: "active",     dateInscription: "2024-09-01", notes: "Formatrice web & algorithmie" },
-  { id: 3,  prenom: "Nadia",    nom: "A.",     email: "nadia@asso.fr",    telephone: "06 33 44 55 66", role: "formatrice",    statut: "active",     dateInscription: "2024-10-15", notes: "Formatrice projets avancées" },
-  { id: 4,  prenom: "Amira",    nom: "L.",     email: "amira@asso.fr",    telephone: "06 44 55 66 77", role: "benevole",      statut: "active",     dateInscription: "2024-11-01", notes: "Accueil & animation" },
-  { id: 5,  prenom: "Fatima",   nom: "K.",     email: "fatima@asso.fr",   telephone: "06 55 66 77 88", role: "benevole",      statut: "active",     dateInscription: "2025-01-10", notes: "" },
-  { id: 6,  prenom: "Yasmine",  nom: "D.",     email: "yasmine@asso.fr",  telephone: "06 66 77 88 99", role: "benevole",      statut: "inactive",   dateInscription: "2024-12-01", notes: "Indisponible jusqu'à sept." },
-  { id: 7,  prenom: "Inès",     nom: "C.",     email: "ines@asso.fr",     telephone: "",               role: "benevole",      statut: "en attente", dateInscription: "2025-05-10", notes: "Candidature reçue" },
-]
+const MEMBRES_INITIAUX: Membre[] = membresMock.liste as Membre[]
 
 const statutStyle: Record<StatutMembre, string> = {
   "active":     "bg-finances-light text-finances-dark",

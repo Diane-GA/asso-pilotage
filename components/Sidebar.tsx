@@ -8,7 +8,6 @@ import {
   Euro,
   BookOpen,
   Megaphone,
-  Users,
   Heart,
   Map,
   ClipboardCheck,
@@ -26,7 +25,6 @@ const navItems = [
   { href: "/finances",      label: "Finances",        icon: Euro,            accent: "bg-finances-light text-finances-dark",           dot: "bg-finances" },
   { href: "/ateliers",      label: "Ateliers",        icon: BookOpen,        accent: "bg-ateliers-light text-ateliers-dark",           dot: "bg-ateliers" },
   { href: "/communication", label: "Communication",   icon: Megaphone,       accent: "bg-communication-light text-communication-dark", dot: "bg-communication" },
-  { href: "/benevoles",     label: "Bénévoles",       icon: Users,           accent: "bg-benevoles-light text-benevoles-dark",         dot: "bg-benevoles" },
   { href: "/membres",       label: "Membres",         icon: UserCog,         accent: "bg-slate-100 text-slate-700",                   dot: "bg-slate-500" },
 ]
 

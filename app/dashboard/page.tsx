@@ -1,6 +1,6 @@
 import StatCard from "@/components/StatCard"
-import { UserX, Euro, BookOpen, Megaphone, Users } from "lucide-react"
-import { absences, finances, ateliers, communication, benevoles } from "@/lib/mock-data"
+import { UserX, Euro, BookOpen, Megaphone, UserCog } from "lucide-react"
+import { absences, finances, ateliers, communication, membres } from "@/lib/mock-data"
 
 function todayFr() {
   return new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
@@ -13,12 +13,14 @@ export default function DashboardPage() {
   ).length
   const ateliersCetteSemaine = ateliers.sessions.filter((s) => s.statut === "planifié").length
 
+  const membresEnAttente = membres.liste.filter((m) => m.statut === "en attente").length
+
   const totalAlertes =
     absences.stats.nonJustifiees +
     finances.demandes.filter((d) => d.statut === "à compléter").length +
     ateliersSallesNonConfirmees +
     communication.calendrier.filter((p) => p.statut === "à créer").length +
-    (benevoles.prochainEvenement.besoins - benevoles.prochainEvenement.confirmes)
+    membresEnAttente
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -98,18 +100,18 @@ export default function DashboardPage() {
         />
 
         <StatCard
-          title="Bénévoles"
-          icon={Users}
-          accentClass="bg-benevoles-light"
-          iconClass="text-benevoles-dark"
-          borderClass="border-benevoles"
-          alerts={benevoles.prochainEvenement.besoins - benevoles.prochainEvenement.confirmes}
-          href="/benevoles"
-          cta="Gérer les bénévoles"
+          title="Membres"
+          icon={UserCog}
+          accentClass="bg-slate-100"
+          iconClass="text-slate-700"
+          borderClass="border-slate-300"
+          alerts={membresEnAttente}
+          href="/membres"
+          cta="Gérer les membres"
           stats={[
-            { label: "Bénévoles actifs", value: `${benevoles.stats.confirmes}/${benevoles.stats.total}` },
-            { label: `Prochains : ${benevoles.prochainEvenement.nom}`, value: `${benevoles.prochainEvenement.confirmes}/${benevoles.prochainEvenement.besoins}`, highlight: benevoles.prochainEvenement.confirmes < benevoles.prochainEvenement.besoins },
-            { label: "Désistements en cours", value: benevoles.stats.desistementsEnCours, highlight: benevoles.stats.desistementsEnCours > 0 },
+            { label: "Membres actifs", value: membres.liste.filter((m) => m.statut === "active").length },
+            { label: "Bénévoles", value: membres.liste.filter((m) => m.role === "benevole").length },
+            { label: "Candidatures en attente", value: membresEnAttente, highlight: membresEnAttente > 0 },
           ]}
         />
       </div>
