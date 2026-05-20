@@ -2,11 +2,12 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { communication } from "@/lib/mock-data"
-import { Calendar, Columns3, Check, X, RotateCcw, Plus, Pencil, CalendarDays } from "lucide-react"
+import { Calendar, Columns3, Check, X, RotateCcw, Plus, Pencil, CalendarDays, Shuffle, CheckCircle2, XCircle } from "lucide-react"
 import SlideOver, { Field, Input, Textarea, Select, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
 
-const STORAGE_POSTS   = "asso-communication-posts"
-const STORAGE_EVENTS  = "asso-communication-events"
+const STORAGE_POSTS         = "asso-communication-posts"
+const STORAGE_EVENTS        = "asso-communication-events"
+const STORAGE_INTEGRATIONS  = "asso-communication-integrations"
 
 function load<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback
@@ -25,6 +26,20 @@ interface Evenement {
   nom: string
   date: string
   type: TypeEvenement
+}
+
+interface IntegrationsConfig {
+  method: "none" | "zapier" | "supabase"
+  zapierWebhookUrl: string
+  zapierTriggerOn: "approuvé" | "publié"
+  zapierEnabled: boolean
+}
+
+const integrationsInitial: IntegrationsConfig = {
+  method: "none",
+  zapierWebhookUrl: "",
+  zapierTriggerOn: "approuvé",
+  zapierEnabled: false,
 }
 
 interface Post {
@@ -150,10 +165,10 @@ function CalendrierTab({ posts, evenements }: { posts: Post[]; evenements: Evene
         })}
       </div>
 
-      {/* Légende événements */}
-      {evenements.length > 0 && (
+      {/* Légende événements — filtrée au mois affiché */}
+      {events.length > 0 && (
         <div className="flex gap-3 flex-wrap text-xs text-muted pt-2">
-          {evenements.map((e) => (
+          {events.map((e) => (
             <span key={e.id} className="flex items-center gap-1.5 bg-absences-light text-absences-dark px-2 py-1 rounded-full">
               📅 {e.nom} · {new Date(e.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
             </span>
@@ -374,6 +389,186 @@ function KanbanTab({ posts, onChangeStatus, onEdit, onRead }: {
 }
 
 // ──────────────────────────────────────────────
+// Onglet Intégrations — connexion réseaux sociaux
+// ──────────────────────────────────────────────
+function IntegrationsTab({
+  config,
+  onChange,
+  onTest,
+  testStatus,
+}: {
+  config: IntegrationsConfig
+  onChange: (c: IntegrationsConfig) => void
+  onTest: () => void
+  testStatus: "idle" | "sending" | "ok" | "error"
+}) {
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted">
+        Connectez vos réseaux sociaux pour automatiser la publication des posts approuvés.
+        Choisissez votre méthode selon votre infrastructure.
+      </p>
+
+      {/* Choix de méthode */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Zapier / Make */}
+        <div
+          onClick={() => onChange({ ...config, method: "zapier" })}
+          className={`rounded-2xl border-2 p-5 flex flex-col gap-4 cursor-pointer transition-colors ${
+            config.method === "zapier" ? "border-ateliers bg-ateliers-light" : "border-border bg-surface hover:bg-slate-50"
+          }`}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-base font-bold text-foreground">Zapier / Make</span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Disponible</span>
+              </div>
+              <p className="text-xs text-muted">Via webhook HTTP — aucun backend requis</p>
+            </div>
+            <div className={`w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 transition-colors ${config.method === "zapier" ? "border-ateliers bg-ateliers" : "border-slate-300"}`} />
+          </div>
+          <ul className="text-xs text-muted space-y-1.5">
+            <li className="flex items-start gap-1.5"><span className="text-emerald-500 shrink-0 font-bold">✓</span> Fonctionne sans backend</li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-500 shrink-0 font-bold">✓</span> Configure en 10 minutes</li>
+            <li className="flex items-start gap-1.5"><span className="text-slate-400 shrink-0">·</span> Compte Zapier ou Make requis</li>
+            <li className="flex items-start gap-1.5"><span className="text-slate-400 shrink-0">·</span> Peut être payant selon le volume</li>
+          </ul>
+        </div>
+
+        {/* Supabase */}
+        <div className="rounded-2xl border-2 border-border bg-surface p-5 flex flex-col gap-4 opacity-50 cursor-not-allowed">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-base font-bold text-foreground">Supabase</span>
+                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">Phase 2</span>
+              </div>
+              <p className="text-xs text-muted">Via Edge Functions — intégration native</p>
+            </div>
+            <div className="w-4 h-4 rounded-full border-2 border-slate-300 shrink-0 mt-0.5" />
+          </div>
+          <ul className="text-xs text-muted space-y-1.5">
+            <li className="flex items-start gap-1.5"><span className="text-emerald-500 shrink-0 font-bold">✓</span> Tokens OAuth sécurisés côté serveur</li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-500 shrink-0 font-bold">✓</span> Publication directe sans outil tiers</li>
+            <li className="flex items-start gap-1.5"><span className="text-slate-400 shrink-0">⏳</span> Nécessite la migration Supabase (ADR 001)</li>
+            <li className="flex items-start gap-1.5"><span className="text-slate-400 shrink-0">⏳</span> Validation Meta & LinkedIn requise</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Config Zapier/Make */}
+      {config.method === "zapier" && (
+        <div className="bg-surface border border-border rounded-2xl p-5 space-y-5">
+          <h3 className="text-sm font-semibold text-foreground">Configuration Zapier / Make</h3>
+
+          {/* URL webhook */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">URL du webhook</label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                placeholder="https://hooks.zapier.com/hooks/catch/..."
+                value={config.zapierWebhookUrl}
+                onChange={(e) => onChange({ ...config, zapierWebhookUrl: e.target.value })}
+                className="flex-1 text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ateliers/30"
+              />
+              <button
+                type="button"
+                onClick={onTest}
+                disabled={!config.zapierWebhookUrl || testStatus === "sending"}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              >
+                {testStatus === "sending" && <span className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />}
+                {testStatus === "ok"      && <CheckCircle2 size={13} className="text-emerald-500" />}
+                {testStatus === "error"   && <XCircle size={13} className="text-alert" />}
+                {testStatus === "idle"    && "Tester"}
+                {testStatus === "sending" && "Envoi…"}
+                {testStatus === "ok"      && "OK !"}
+                {testStatus === "error"   && "Erreur"}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted">Créez un Zap ou un scénario Make avec déclencheur "Webhook", copiez l'URL ici.</p>
+          </div>
+
+          {/* Déclencheur */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Déclencher automatiquement quand un post est</label>
+            <div className="flex gap-2">
+              {(["approuvé", "publié"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => onChange({ ...config, zapierTriggerOn: v })}
+                  className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-colors capitalize ${
+                    config.zapierTriggerOn === v
+                      ? "bg-ateliers-light text-ateliers-dark border-ateliers/30"
+                      : "bg-surface border-border text-muted hover:border-slate-400"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Toggle activer */}
+          <div className="flex items-center justify-between pt-1 border-t border-border">
+            <div>
+              <p className="text-sm font-medium text-foreground">Activer l'envoi automatique</p>
+              <p className="text-xs text-muted mt-0.5">Le webhook sera appelé à chaque changement de statut correspondant</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange({ ...config, zapierEnabled: !config.zapierEnabled })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.zapierEnabled ? "bg-ateliers" : "bg-slate-200"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${config.zapierEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+
+          {/* Statut connexion */}
+          {config.zapierEnabled && config.zapierWebhookUrl && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs text-emerald-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              Actif — les posts marqués &ldquo;{config.zapierTriggerOn}&rdquo; déclencheront le webhook
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Guide rapide Zapier/Make */}
+      {config.method === "zapier" && (
+        <div className="bg-slate-50 border border-border rounded-2xl p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Guide rapide</h3>
+          <ol className="text-xs text-muted space-y-2 list-decimal list-inside">
+            <li>Créez un compte <strong className="text-foreground">Zapier</strong> (gratuit) ou <strong className="text-foreground">Make</strong> (gratuit jusqu'à 1 000 opérations/mois)</li>
+            <li>Créez un Zap / scénario avec le déclencheur <strong className="text-foreground">Webhooks → Catch Hook</strong></li>
+            <li>Copiez l'URL du webhook et collez-la dans le champ ci-dessus</li>
+            <li>Ajoutez une action par réseau : <strong className="text-foreground">LinkedIn for Business</strong>, <strong className="text-foreground">Instagram for Business</strong>, <strong className="text-foreground">Facebook Pages</strong></li>
+            <li>Connectez vos comptes sociaux dans Zapier / Make (OAuth géré par eux)</li>
+            <li>Mappez les champs : <code className="bg-slate-200 px-1 rounded">titre</code>, <code className="bg-slate-200 px-1 rounded">contenu</code>, <code className="bg-slate-200 px-1 rounded">plateformes</code></li>
+          </ol>
+          <div className="flex gap-3 pt-1">
+            <a href="https://zapier.com" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-ateliers-dark hover:underline">→ zapier.com</a>
+            <span className="text-border">·</span>
+            <a href="https://make.com" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-ateliers-dark hover:underline">→ make.com</a>
+          </div>
+        </div>
+      )}
+
+      {/* Aucune méthode sélectionnée */}
+      {config.method === "none" && (
+        <div className="text-center py-10 text-muted text-sm">
+          <Shuffle size={28} className="mx-auto mb-3 opacity-30" />
+          Sélectionnez une méthode d'intégration ci-dessus pour la configurer.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
 // Page principale
 // ──────────────────────────────────────────────
 const eventsInitiaux: Evenement[] = communication.evenements as Evenement[]
@@ -391,7 +586,7 @@ const emptyEvent = (): Omit<Evenement, "id"> => ({
 const ALL_PLATEFORMES: Plateforme[] = ["LinkedIn", "Instagram", "Facebook"]
 
 export default function CommunicationPage() {
-  const [tab, setTab] = useState<"calendrier" | "kanban" | "evenements">("calendrier")
+  const [tab, setTab] = useState<"calendrier" | "kanban" | "evenements" | "integrations">("calendrier")
 
   // Posts
   const [posts, setPosts] = useState<Post[]>(postsInitiaux)
@@ -406,17 +601,69 @@ export default function CommunicationPage() {
   const [editingEvent, setEditingEvent] = useState<Evenement | null>(null)
   const [eventForm, setEventForm] = useState<Omit<Evenement, "id">>(emptyEvent())
 
+  // Intégrations
+  const [integrations, setIntegrations] = useState<IntegrationsConfig>(integrationsInitial)
+  const [webhookTestStatus, setWebhookTestStatus] = useState<"idle" | "sending" | "ok" | "error">("idle")
+
   useEffect(() => {
     setPosts(load(STORAGE_POSTS, postsInitiaux))
     setEvents(load(STORAGE_EVENTS, eventsInitiaux))
+    setIntegrations(load(STORAGE_INTEGRATIONS, integrationsInitial))
   }, [])
 
   function persistPosts(data: Post[]) { setPosts(data); localStorage.setItem(STORAGE_POSTS, JSON.stringify(data)) }
   function persistEvents(data: Evenement[]) { setEvents(data); localStorage.setItem(STORAGE_EVENTS, JSON.stringify(data)) }
+  function persistIntegrations(data: IntegrationsConfig) { setIntegrations(data); localStorage.setItem(STORAGE_INTEGRATIONS, JSON.stringify(data)) }
+
+  // ── Webhook ───────────────────────────────
+  async function triggerWebhook(post: Post) {
+    if (!integrations.zapierEnabled || !integrations.zapierWebhookUrl || integrations.method !== "zapier") return
+    if (post.statut !== integrations.zapierTriggerOn) return
+    try {
+      await fetch(integrations.zapierWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titre: post.titre,
+          contenu: post.contenu ?? "",
+          plateformes: post.plateforme,
+          auteur: post.auteur,
+          date: post.date,
+          evenement: post.evenement ?? null,
+        }),
+      })
+    } catch { /* silently ignore */ }
+  }
+
+  async function testWebhook() {
+    if (!integrations.zapierWebhookUrl) return
+    setWebhookTestStatus("sending")
+    try {
+      await fetch(integrations.zapierWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titre: "Test depuis Asso Pilotage",
+          contenu: "Ceci est un test de connexion webhook.",
+          plateformes: ["LinkedIn"],
+          auteur: "Test",
+          date: new Date().toISOString().split("T")[0],
+          evenement: null,
+        }),
+      })
+      setWebhookTestStatus("ok")
+    } catch {
+      setWebhookTestStatus("error")
+    }
+    setTimeout(() => setWebhookTestStatus("idle"), 3000)
+  }
 
   // ── Posts CRUD ────────────────────────────
   function changeStatus(id: number, status: ValidationStatus) {
-    persistPosts(posts.map((p) => p.id === id ? { ...p, statut: status } : p))
+    const updated = posts.map((p) => p.id === id ? { ...p, statut: status } : p)
+    persistPosts(updated)
+    const post = updated.find((p) => p.id === id)
+    if (post) triggerWebhook({ ...post, statut: status })
   }
 
   function openNew() { setEditing(null); setForm(emptyPost()); setSlideOpen(true) }
@@ -581,11 +828,21 @@ export default function CommunicationPage() {
           <CalendarDays size={14} /> Événements
           <span className="text-[10px] bg-absences-light text-absences-dark px-1.5 py-0.5 rounded-full font-semibold">{events.length}</span>
         </button>
+        <button
+          onClick={() => setTab("integrations")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === "integrations" ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"}`}
+        >
+          <Shuffle size={14} /> Intégrations
+          {integrations.zapierEnabled && integrations.zapierWebhookUrl && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+          )}
+        </button>
       </div>
 
-      {tab === "calendrier" && <CalendrierTab posts={posts} evenements={events} />}
-      {tab === "kanban"     && <KanbanTab posts={posts} onChangeStatus={changeStatus} onEdit={openEdit} onRead={(p) => setViewingPost(p)} />}
-      {tab === "evenements" && <EventsTab events={events} onEdit={openEditEvent} onNew={openNewEvent} />}
+      {tab === "calendrier"   && <CalendrierTab posts={posts} evenements={events} />}
+      {tab === "kanban"       && <KanbanTab posts={posts} onChangeStatus={changeStatus} onEdit={openEdit} onRead={(p) => setViewingPost(p)} />}
+      {tab === "evenements"   && <EventsTab events={events} onEdit={openEditEvent} onNew={openNewEvent} />}
+      {tab === "integrations" && <IntegrationsTab config={integrations} onChange={persistIntegrations} onTest={testWebhook} testStatus={webhookTestStatus} />}
 
       <PostReadSlideOver
         post={viewingPost}
