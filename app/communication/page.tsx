@@ -6,6 +6,7 @@ import { Calendar, Columns3, Check, X, RotateCcw, Plus, Shuffle, CheckCircle2, X
 import SlideOver, { Field, Input, Textarea, Select, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
 
 const STORAGE_POSTS        = "asso-communication-posts"
+const STORAGE_REJECTED     = "asso-communication-rejected"
 const STORAGE_INTEGRATIONS = "asso-communication-integrations"
 const S_SESSIONS           = "asso-ateliers-sessions"
 const S_BENEFICIAIRES      = "asso-beneficiaires"
@@ -245,8 +246,9 @@ function CalendrierTab({ posts, onNewPost }: { posts: Post[]; onNewPost: (date: 
 // ──────────────────────────────────────────────
 // Kanban de validation
 // ──────────────────────────────────────────────
-function KanbanTab({ posts, onChangeStatus, onEdit }: {
+function KanbanTab({ posts, rejectedIds = [], onChangeStatus, onEdit }: {
   posts: Post[]
+  rejectedIds?: number[]
   onChangeStatus: (id: number, status: ValidationStatus) => void
   onEdit: (p: Post) => void
 }) {
@@ -269,8 +271,11 @@ function KanbanTab({ posts, onChangeStatus, onEdit }: {
                 <div
                   key={p.id}
                   onClick={() => onEdit(p)}
-                  className="bg-white rounded-xl p-3 shadow-sm border border-white flex flex-col gap-2 cursor-pointer hover:shadow-md hover:border-slate-200 transition-all group"
+                  className="relative bg-white rounded-xl p-3 shadow-sm border border-white flex flex-col gap-2 cursor-pointer hover:shadow-md hover:border-slate-200 transition-all group"
                 >
+                  {rejectedIds.includes(p.id) && (
+                    <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-red-500 ring-2 ring-white shadow-sm" />
+                  )}
                   <div className="flex items-start justify-between gap-1">
                     <p className="text-xs font-semibold text-foreground leading-snug group-hover:text-ateliers-dark transition-colors">{p.titre}</p>
                     <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${p.categorie === "atelier" ? "bg-ateliers-light text-ateliers-dark" : "bg-slate-100 text-slate-600"}`}>
@@ -443,6 +448,8 @@ export default function CommunicationPage() {
   const [newFormatrice, setNewFormatrice] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const [rejectedIds, setRejectedIds] = useState<number[]>([])
+
   const [integrations, setIntegrations] = useState<IntegrationsConfig>(integrationsInitial)
   const [webhookTestStatus, setWebhookTestStatus] = useState<"idle" | "sending" | "ok" | "error">("idle")
 
@@ -461,12 +468,14 @@ export default function CommunicationPage() {
       localStorage.setItem(STORAGE_POSTS, JSON.stringify(migrated))
     }
     setPosts(migrated)
+    setRejectedIds(load<number[]>(STORAGE_REJECTED, []))
     setIntegrations(load(STORAGE_INTEGRATIONS, integrationsInitial))
     setSessions(load(S_SESSIONS, []))
     setBeneficiaires(load(S_BENEFICIAIRES, []))
   }, [])
 
   function persistPosts(data: Post[]) { setPosts(data); localStorage.setItem(STORAGE_POSTS, JSON.stringify(data)) }
+  function persistRejected(ids: number[]) { setRejectedIds(ids); localStorage.setItem(STORAGE_REJECTED, JSON.stringify(ids)) }
   function persistIntegrations(data: IntegrationsConfig) { setIntegrations(data); localStorage.setItem(STORAGE_INTEGRATIONS, JSON.stringify(data)) }
 
   async function triggerWebhook(post: Post) {
@@ -492,6 +501,13 @@ export default function CommunicationPage() {
   }
 
   function changeStatus(id: number, status: ValidationStatus) {
+    const prev = posts.find(p => p.id === id)
+    // Dot rouge : allumé quand "à valider" → "brouillon", éteint dès que le post quitte brouillon
+    if (status === "brouillon" && prev?.statut === "à valider") {
+      persistRejected([...rejectedIds, id])
+    } else if (status !== "brouillon" && rejectedIds.includes(id)) {
+      persistRejected(rejectedIds.filter(rid => rid !== id))
+    }
     const updated = posts.map((p) => p.id === id ? { ...p, statut: status } : p)
     persistPosts(updated)
     const post = updated.find((p) => p.id === id)
@@ -991,7 +1007,7 @@ export default function CommunicationPage() {
       </div>
 
       {tab === "calendrier"   && <CalendrierTab posts={posts} onNewPost={openNewWithDate} />}
-      {tab === "kanban"       && <KanbanTab posts={posts} onChangeStatus={changeStatus} onEdit={openEdit} />}
+      {tab === "kanban"       && <KanbanTab posts={posts} rejectedIds={rejectedIds} onChangeStatus={changeStatus} onEdit={openEdit} />}
       {tab === "integrations" && <IntegrationsTab config={integrations} onChange={persistIntegrations} onTest={testWebhook} testStatus={webhookTestStatus} />}
     </div>
   )
