@@ -110,6 +110,15 @@ export default function BrouillonGroupesTab(props: {
   /** Brouillons indexés par atelierId. */
   const [brouillons, setBrouillons] = useState<Record<number, Brouillon | null>>({})
 
+  /** Marque l'atelier qui vient d'être (re)généré pour pulser visuellement
+   *  la carte. Reset automatique au bout de 2,5 s. */
+  const [justRegen, setJustRegen] = useState<number | null>(null)
+  useEffect(() => {
+    if (justRegen === null) return
+    const t = setTimeout(() => setJustRegen(null), 2500)
+    return () => clearTimeout(t)
+  }, [justRegen])
+
   // SlideOver "régénérer avec paramètres"
   interface ParamForm {
     tailleGroupeCible: number
@@ -149,6 +158,8 @@ export default function BrouillonGroupesTab(props: {
     const brouillon = composerGroupes(fiche, beneficiaires.map(toGroupingInput), options)
     saveBrouillon(brouillon)
     setBrouillons(m => ({ ...m, [atelier.id]: brouillon }))
+    // Highlight visuel temporaire sur la carte concernée.
+    setJustRegen(atelier.id)
   }
 
   function ouvrirParametres(atelier: Session) {
@@ -313,7 +324,14 @@ export default function BrouillonGroupesTab(props: {
         const pasDeCompetence = atelier.competencesCiblees.length === 0
 
         return (
-          <article key={atelier.id} className="bg-surface rounded-xl border border-border overflow-hidden">
+          <article
+            key={atelier.id}
+            className={`bg-surface rounded-xl border overflow-hidden transition-all duration-300 ${
+              justRegen === atelier.id
+                ? "border-ateliers ring-4 ring-ateliers/20"
+                : "border-border"
+            }`}
+          >
             {/* Header atelier */}
             <header className="px-5 py-4 border-b border-border flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0 flex-1">
@@ -457,8 +475,9 @@ export default function BrouillonGroupesTab(props: {
 
               {brouillon && (
                 <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted">
-                  <span>
-                    Généré le {new Date(brouillon.generedAt).toLocaleString("fr-FR")} · Mode <b>{brouillon.parametres.mode}</b>
+                  <span className={justRegen === atelier.id ? "text-ateliers-dark font-semibold" : ""}>
+                    {justRegen === atelier.id ? "✨ Régénéré à l'instant" : `Généré le ${new Date(brouillon.generedAt).toLocaleString("fr-FR")}`}
+                    {" "}· Mode <b>{brouillon.parametres.mode}</b>
                   </span>
                   <button onClick={() => supprimerBrouillon(atelier.id)} className="hover:text-foreground hover:underline">
                     <RotateCcw size={10} className="inline mr-1" /> Abandonner ce brouillon
