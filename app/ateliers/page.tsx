@@ -84,6 +84,7 @@ interface Groupe {
 const S_SESSIONS  = "asso-ateliers-sessions"
 const S_BENEF     = "asso-beneficiaires"
 const S_GROUPES   = "asso-groupes"
+const S_MEMBRES   = "asso-membres"
 const S_PRESENCES = (id: number) => `asso-presences-atelier-${id}`
 
 function load<T>(key: string, fallback: T): T {
@@ -455,8 +456,8 @@ function GroupesTab({
 // ══════════════════════════════════════════════
 const TABS = [
   { id: "ateliers",  label: "Ateliers",         icon: CalendarDays },
-  { id: "groupes",   label: "Groupes",          icon: Columns3 },
   { id: "brouillon", label: "Brouillon groupes", icon: Shuffle },
+  { id: "groupes",   label: "Groupes",          icon: Columns3 },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -490,6 +491,15 @@ export default function AteliersPage() {
   // ── Bénévoles (read-only) ──
   const benevoles = benevolesMock.liste
 
+  // ── Membres (liste éditable côté /membres, on lit depuis localStorage pour
+  //    refléter les ajouts/modifs faits sur l'autre page) ──
+  type Membre = (typeof membresMock.liste)[number]
+  const [membres, setMembres] = useState<Membre[]>(membresMock.liste as Membre[])
+
+  function refreshMembres() {
+    setMembres(load<Membre[]>(S_MEMBRES, membresMock.liste as Membre[]))
+  }
+
   // Hydration from localStorage
   useEffect(() => {
     // Migration auto pour les sessions (champs FicheAtelier ajoutés au Lot 2).
@@ -499,6 +509,7 @@ export default function AteliersPage() {
     const benefsRaw = load<Beneficiaire[]>(S_BENEF, ateliersMock.beneficiaires as Beneficiaire[])
     setBeneficiaires(benefsRaw.map(b => migrateBenef(b) as Beneficiaire))
     setGroupes(load(S_GROUPES, ateliersMock.groupes as Groupe[]))
+    refreshMembres()
   }, [])
 
   // ── Sessions CRUD ──
@@ -507,9 +518,12 @@ export default function AteliersPage() {
     localStorage.setItem(S_SESSIONS, JSON.stringify(data))
   }
   function openNewSession() {
+    // Re-lecture des membres : capte un ajout fait sur /membres pendant la session.
+    refreshMembres()
     setEditingSession(null); setSessionForm(emptySession()); setSessionSlide(true)
   }
   function openEditSession(s: Session) {
+    refreshMembres()
     setEditingSession(s)
     setSessionForm({ ...s, beneficiaireIds: [...s.beneficiaireIds], benevoleIds: [...s.benevoleIds] })
     setSessionSlide(true)
@@ -920,26 +934,35 @@ export default function AteliersPage() {
                   ordered
                 />
               </Field>
-              <Field label="Personnes impliquées">
+              <Field label="Personnes impliquées (formatrices / coordinatrices)">
                 <div className="flex flex-wrap gap-2">
-                  {membresMock.liste.map(m => {
-                    const sel = sessionForm.personnesImpliqueesIds.includes(m.id)
-                    return (
-                      <button
-                        type="button"
-                        key={m.id}
-                        onClick={() => togglePersonne(m.id)}
-                        className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                          sel
-                            ? "bg-communication text-white border-communication"
-                            : "bg-surface text-muted border-border hover:border-communication"
-                        }`}
-                      >
-                        {m.prenom} {m.nom}
-                        <span className="ml-1 opacity-60">· {m.role}</span>
-                      </button>
-                    )
-                  })}
+                  {/* On exclut les bénévoles : ils ont leur propre section ci-dessous,
+                      avec leurs compétences spécifiques. Éviter le doublon. */}
+                  {membres
+                    .filter(m => m.role !== "benevole")
+                    .map(m => {
+                      const sel = sessionForm.personnesImpliqueesIds.includes(m.id)
+                      return (
+                        <button
+                          type="button"
+                          key={m.id}
+                          onClick={() => togglePersonne(m.id)}
+                          className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                            sel
+                              ? "bg-communication text-white border-communication"
+                              : "bg-surface text-muted border-border hover:border-communication"
+                          }`}
+                        >
+                          {m.prenom} {m.nom}
+                          <span className="ml-1 opacity-60">· {m.role}</span>
+                        </button>
+                      )
+                    })}
+                  {membres.filter(m => m.role !== "benevole").length === 0 && (
+                    <p className="text-[11px] text-muted italic">
+                      Aucune formatrice / coordinatrice enregistrée. Ajoute-les dans l&apos;onglet Membres.
+                    </p>
+                  )}
                 </div>
               </Field>
             </div>
