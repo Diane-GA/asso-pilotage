@@ -23,11 +23,12 @@ import {
 import Link from "next/link"
 import {
   Plus, Pencil, CalendarDays, Users, UserCheck, ClipboardCheck,
-  X, Columns3, Check, AlertTriangle, Sparkles,
+  X, Columns3, Check, AlertTriangle, Sparkles, Shuffle,
 } from "lucide-react"
 import SlideOver, {
   Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton,
 } from "@/components/SlideOver"
+import BrouillonGroupesTab from "./brouillon-tab"
 
 // ──────────────────────────────────────────────
 // Types
@@ -453,15 +454,16 @@ function GroupesTab({
 // PAGE PRINCIPALE
 // ══════════════════════════════════════════════
 const TABS = [
-  { id: "ateliers", label: "Ateliers", icon: CalendarDays },
-  { id: "groupes",  label: "Groupes",  icon: Columns3 },
+  { id: "ateliers",  label: "Ateliers",         icon: CalendarDays },
+  { id: "groupes",   label: "Groupes",          icon: Columns3 },
+  { id: "brouillon", label: "Brouillon groupes", icon: Shuffle },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
 
 export default function AteliersPage() {
   const [tab, setTab] = useState<TabId>("ateliers")
-  const [toast, setToast] = useState<{ message: string; href: string } | null>(null)
+  const [toast, setToast] = useState<{ message: string } | null>(null)
 
   // Auto-effacement du toast après 6 s
   useEffect(() => {
@@ -534,7 +536,6 @@ export default function AteliersPage() {
       saveBrouillon(brouillon)
       setToast({
         message: `Brouillon généré : ${brouillon.groupes.length} groupe${brouillon.groupes.length > 1 ? "s" : ""} proposé${brouillon.groupes.length > 1 ? "s" : ""}.`,
-        href: "/brouillon-groupes",
       })
     }
   }
@@ -699,6 +700,13 @@ export default function AteliersPage() {
           beneficiaires={beneficiaires}
           onEdit={openEditGroupe}
           onUpdateMembers={updateGroupeMembers}
+        />
+      )}
+      {tab === "brouillon" && (
+        <BrouillonGroupesTab
+          sessions={sessions}
+          beneficiaires={beneficiaires}
+          onGroupesValides={(nouveaux) => persistGroupes([...groupes, ...nouveaux])}
         />
       )}
 
@@ -1078,13 +1086,13 @@ export default function AteliersPage() {
             <p className="text-sm font-semibold">Brouillon de groupes prêt</p>
             <p className="text-xs opacity-90">{toast.message}</p>
           </div>
-          <Link
-            href={toast.href}
-            onClick={() => setToast(null)}
+          <button
+            type="button"
+            onClick={() => { setTab("brouillon"); setToast(null) }}
             className="text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg whitespace-nowrap"
           >
             Voir →
-          </Link>
+          </button>
         </div>
       )}
     </div>

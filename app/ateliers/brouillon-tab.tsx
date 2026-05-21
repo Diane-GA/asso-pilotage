@@ -1,14 +1,11 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import Link from "next/link"
-import { ateliers as ateliersMock } from "@/lib/mock-data"
 import {
   THEMATIQUES,
-  migrate as migrateBenef,
   type NotesPositionnement,
 } from "@/lib/positionnement"
-import { migrateFiche, type FicheAtelier } from "@/lib/atelier"
+import type { FicheAtelier } from "@/lib/atelier"
 import {
   composerGroupes,
   saveBrouillon,
@@ -25,11 +22,11 @@ import {
 } from "lucide-react"
 
 // ──────────────────────────────────────────────
-// Types locaux (alignés avec app/ateliers/page.tsx et app/beneficiaires/page.tsx)
+// Types — alignés avec app/ateliers/page.tsx
 // ──────────────────────────────────────────────
 type SessionStatut = "planifié" | "en cours" | "terminé" | "annulé"
-type NiveauBenef   = "débutant" | "intermédiaire" | "avancé"
 type StatutBenef   = "actif" | "diplômé" | "abandon"
+type NiveauBenef   = "débutant" | "intermédiaire" | "avancé"
 type TypeGroupe    = "niveau" | "âge" | "mixte"
 
 interface Session extends FicheAtelier {
@@ -73,17 +70,8 @@ interface Groupe {
 }
 
 // ──────────────────────────────────────────────
-// Storage
+// Helpers
 // ──────────────────────────────────────────────
-const S_SESSIONS = "asso-ateliers-sessions"
-const S_BENEF    = "asso-beneficiaires"
-const S_GROUPES  = "asso-groupes"
-
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback
-  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback } catch { return fallback }
-}
-
 function toGroupingInput(b: Beneficiaire): BeneficiairePourGroupage {
   return {
     id: b.id, prenom: b.prenom, nom: b.nom,
@@ -105,11 +93,17 @@ function cohesionColor(score: number): string {
 }
 
 // ──────────────────────────────────────────────
-// Page
+// Composant principal
 // ──────────────────────────────────────────────
-export default function BrouillonGroupesPage() {
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [benefs, setBenefs]     = useState<Beneficiaire[]>([])
+export default function BrouillonGroupesTab(props: {
+  sessions: Session[]
+  beneficiaires: Beneficiaire[]
+  /** Appelé quand la collaboratrice valide un brouillon : le parent ajoute les
+   *  nouveaux groupes à son state, ce qui les rend visibles dans l'onglet Groupes. */
+  onGroupesValides: (newGroupes: Groupe[]) => void
+}) {
+  const { sessions, beneficiaires, onGroupesValides } = props
+
   /** Brouillons indexés par atelierId. */
   const [brouillons, setBrouillons] = useState<Record<number, Brouillon | null>>({})
 
@@ -123,27 +117,19 @@ export default function BrouillonGroupesPage() {
   // Drag & drop
   const dragRef = useRef<{ benefId: number; fromGroupeId: string; atelierId: number } | null>(null)
 
-  // ── Chargement initial ──
+  // Chargement des brouillons existants pour chaque session
   useEffect(() => {
-    const sRaw = load<Session[]>(S_SESSIONS, ateliersMock.sessions as Session[])
-    const sMigrated = sRaw.map(s => migrateFiche(s) as Session)
-    setSessions(sMigrated)
-
-    const bRaw = load<Beneficiaire[]>(S_BENEF, ateliersMock.beneficiaires as Beneficiaire[])
-    setBenefs(bRaw.map(b => migrateBenef(b) as Beneficiaire))
-
-    // Pour chaque session, on essaie de charger un brouillon
     const map: Record<number, Brouillon | null> = {}
-    for (const s of sMigrated) {
+    for (const s of sessions) {
       map[s.id] = loadBrouillon(s.id)
     }
     setBrouillons(map)
-  }, [])
+  }, [sessions])
 
   // ── Actions ──
   function genererPour(atelier: Session, override?: Partial<FicheAtelier>) {
     const fiche = { ...atelier, ...override }
-    const brouillon = composerGroupes(fiche, benefs.map(toGroupingInput))
+    const brouillon = composerGroupes(fiche, beneficiaires.map(toGroupingInput))
     saveBrouillon(brouillon)
     setBrouillons(m => ({ ...m, [atelier.id]: brouillon }))
   }
@@ -169,8 +155,6 @@ export default function BrouillonGroupesPage() {
   }
 
   function validerComposition(atelier: Session, brouillon: Brouillon) {
-    // Convertit les groupes du brouillon en Groupe[] persistés dans asso-groupes
-    const existants = load<Groupe[]>(S_GROUPES, [])
     const baseId = Date.now()
     const nouveaux: Groupe[] = brouillon.groupes.map((g, i) => ({
       id: baseId + i,
@@ -179,10 +163,9 @@ export default function BrouillonGroupesPage() {
       description: `Auto-généré depuis "${atelier.titre}" — ${g.beneficiaireIds.length} bénéficiaires, cohésion ${g.scoreCohesion}%`,
       beneficiaireIds: [...g.beneficiaireIds],
     }))
-    const tous = [...existants, ...nouveaux]
-    localStorage.setItem(S_GROUPES, JSON.stringify(tous))
+    onGroupesValides(nouveaux)
     supprimerBrouillon(atelier.id)
-    alert(`${nouveaux.length} groupe(s) ajouté(s) à l'onglet Ateliers.`)
+    alert(`${nouveaux.length} groupe(s) ajouté(s) au sous-onglet Groupes.`)
   }
 
   // ── Drag & drop ──
@@ -212,9 +195,8 @@ export default function BrouillonGroupesPage() {
     dragRef.current = null
   }
 
-  // ── Helpers d'affichage ──
   function benefById(id: number): Beneficiaire | undefined {
-    return benefs.find(b => b.id === id)
+    return beneficiaires.find(b => b.id === id)
   }
 
   // Ateliers visibles : tous, mais on traite à part ceux sans compétence cochée
@@ -222,190 +204,163 @@ export default function BrouillonGroupesPage() {
     .filter(s => s.statut !== "terminé" && s.statut !== "annulé")
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-  const brouillonsActifs = ateliersAffichables.filter(a => brouillons[a.id])
+  if (ateliersAffichables.length === 0) {
+    return (
+      <div className="text-center py-20 bg-surface rounded-xl border border-border">
+        <div className="mx-auto mb-4 inline-flex p-3 rounded-full bg-slate-50">
+          <Shuffle size={36} className="text-slate-300" />
+        </div>
+        <p className="font-semibold text-foreground">Aucun atelier à venir</p>
+        <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+          Crée d&apos;abord un atelier depuis le sous-onglet Ateliers pour pouvoir générer un brouillon de groupes.
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <header className="mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="bg-amber-100 text-amber-800 rounded-lg p-1.5">
-            <Shuffle size={16} />
-          </span>
-          <h1 className="text-2xl font-bold text-foreground">Brouillon groupes</h1>
-        </div>
-        <p className="text-sm text-muted">
-          Pré-propositions de composition à partir des notes du test de positionnement. À ajuster avant validation.
-        </p>
-      </header>
+    <div className="flex flex-col gap-5">
+      {ateliersAffichables.map(atelier => {
+        const brouillon = brouillons[atelier.id]
+        const pasDeCompetence = atelier.competencesCiblees.length === 0
 
-      {/* Stats globales */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-          <p className="text-3xl font-bold text-amber-800">{brouillonsActifs.length}</p>
-          <p className="text-sm text-amber-700 mt-1">Brouillon{brouillonsActifs.length > 1 ? "s" : ""} en attente</p>
-        </div>
-        <div className="bg-surface rounded-xl border border-border p-4">
-          <p className="text-3xl font-bold text-foreground">{ateliersAffichables.length - brouillonsActifs.length}</p>
-          <p className="text-sm text-muted mt-1">Atelier{ateliersAffichables.length - brouillonsActifs.length > 1 ? "s" : ""} sans brouillon</p>
-        </div>
-        <div className="bg-surface rounded-xl border border-border p-4">
-          <p className="text-3xl font-bold text-foreground">{benefs.filter(b => b.statut === "actif").length}</p>
-          <p className="text-sm text-muted mt-1">Bénéficiaires actifs</p>
-        </div>
-      </div>
-
-      {ateliersAffichables.length === 0 ? (
-        <EtatVide
-          icon={<Shuffle size={36} className="text-slate-300" />}
-          titre="Aucun atelier à venir"
-          message="Crée d'abord un atelier depuis la page Ateliers pour pouvoir générer un brouillon de groupes."
-          action={<Link href="/ateliers" className="text-sm text-ateliers-dark hover:underline">→ Aller à Ateliers</Link>}
-        />
-      ) : (
-        <div className="flex flex-col gap-5">
-          {ateliersAffichables.map(atelier => {
-            const brouillon = brouillons[atelier.id]
-            const pasDeCompetence = atelier.competencesCiblees.length === 0
-
-            return (
-              <article key={atelier.id} className="bg-surface rounded-xl border border-border overflow-hidden">
-                {/* Header atelier */}
-                <header className="px-5 py-4 border-b border-border flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="font-semibold text-foreground">{atelier.titre}</h2>
-                      <span className="text-[10px] text-muted">{new Date(atelier.date).toLocaleDateString("fr-FR")}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      {atelier.competencesCiblees.map(c => {
-                        const t = THEMATIQUES.find(x => x.key === c)
-                        return t ? (
-                          <span key={c} className="text-[10px] bg-ateliers/10 text-ateliers-dark px-1.5 py-0.5 rounded font-medium">
-                            {t.short}
-                          </span>
-                        ) : null
-                      })}
-                      {(atelier.ageMin !== null || atelier.ageMax !== null) && (
-                        <span className="text-[10px] text-muted">· {atelier.ageMin ?? "?"}-{atelier.ageMax ?? "?"} ans</span>
-                      )}
-                      {atelier.tailleGroupeCible !== null && (
-                        <span className="text-[10px] text-muted">· groupes de {atelier.tailleGroupeCible}</span>
-                      )}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                        atelier.mixerNiveaux ? "bg-communication-light text-communication-dark" : "bg-ateliers-light text-ateliers-dark"
-                      }`}>
-                        {atelier.mixerNiveaux ? "hétérogène" : "homogène"}
+        return (
+          <article key={atelier.id} className="bg-surface rounded-xl border border-border overflow-hidden">
+            {/* Header atelier */}
+            <header className="px-5 py-4 border-b border-border flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-semibold text-foreground">{atelier.titre}</h2>
+                  <span className="text-[10px] text-muted">{new Date(atelier.date).toLocaleDateString("fr-FR")}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  {atelier.competencesCiblees.map(c => {
+                    const t = THEMATIQUES.find(x => x.key === c)
+                    return t ? (
+                      <span key={c} className="text-[10px] bg-ateliers/10 text-ateliers-dark px-1.5 py-0.5 rounded font-medium">
+                        {t.short}
                       </span>
-                    </div>
-                  </div>
-                  {/* Actions */}
-                  <div className="flex gap-2 shrink-0">
-                    {brouillon ? (
-                      <>
-                        <button
-                          onClick={() => ouvrirParametres(atelier)}
-                          className="flex items-center gap-1.5 text-xs font-medium border border-border bg-surface text-foreground px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
-                        >
-                          <Settings size={12} /> Régénérer
-                        </button>
-                        <button
-                          onClick={() => validerComposition(atelier, brouillon)}
-                          className="flex items-center gap-1.5 text-xs font-medium bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors"
-                        >
-                          <CheckCircle2 size={12} /> Valider la composition
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => genererPour(atelier)}
-                        disabled={pasDeCompetence}
-                        title={pasDeCompetence ? "Coche au moins une compétence ciblée sur l'atelier" : "Générer un brouillon"}
-                        className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                          pasDeCompetence
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                            : "bg-amber-500 text-white hover:bg-amber-600"
-                        }`}
-                      >
-                        <Sparkles size={12} /> Générer un brouillon
-                      </button>
-                    )}
-                  </div>
-                </header>
-
-                {/* Corps */}
-                <div className="px-5 py-4">
-                  {pasDeCompetence && !brouillon && (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
-                      <AlertTriangle size={12} />
-                      Aucune compétence ciblée n'est cochée pour cet atelier. Édite l'atelier pour en cocher au moins une.
-                    </p>
+                    ) : null
+                  })}
+                  {(atelier.ageMin !== null || atelier.ageMax !== null) && (
+                    <span className="text-[10px] text-muted">· {atelier.ageMin ?? "?"}-{atelier.ageMax ?? "?"} ans</span>
                   )}
-
-                  {brouillon && brouillon.parametres.erreurs.length > 0 && (
-                    <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
-                      <p className="font-semibold mb-1 flex items-center gap-1"><AlertTriangle size={12} /> Génération impossible</p>
-                      <ul className="list-disc pl-4">
-                        {brouillon.parametres.erreurs.map((e, i) => <li key={i}>{e}</li>)}
-                      </ul>
-                    </div>
+                  {atelier.tailleGroupeCible !== null && (
+                    <span className="text-[10px] text-muted">· groupes de {atelier.tailleGroupeCible}</span>
                   )}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    atelier.mixerNiveaux ? "bg-communication-light text-communication-dark" : "bg-ateliers-light text-ateliers-dark"
+                  }`}>
+                    {atelier.mixerNiveaux ? "hétérogène" : "homogène"}
+                  </span>
+                </div>
+              </div>
+              {/* Actions */}
+              <div className="flex gap-2 shrink-0">
+                {brouillon ? (
+                  <>
+                    <button
+                      onClick={() => ouvrirParametres(atelier)}
+                      className="flex items-center gap-1.5 text-xs font-medium border border-border bg-surface text-foreground px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      <Settings size={12} /> Régénérer
+                    </button>
+                    <button
+                      onClick={() => validerComposition(atelier, brouillon)}
+                      className="flex items-center gap-1.5 text-xs font-medium bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <CheckCircle2 size={12} /> Valider la composition
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => genererPour(atelier)}
+                    disabled={pasDeCompetence}
+                    title={pasDeCompetence ? "Coche au moins une compétence ciblée sur l'atelier" : "Générer un brouillon"}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                      pasDeCompetence
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-amber-500 text-white hover:bg-amber-600"
+                    }`}
+                  >
+                    <Sparkles size={12} /> Générer un brouillon
+                  </button>
+                )}
+              </div>
+            </header>
 
-                  {brouillon && brouillon.groupes.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {brouillon.groupes.map(g => (
-                        <GroupeCard
-                          key={g.id}
-                          groupe={g}
-                          atelierId={atelier.id}
-                          dims={atelier.competencesCiblees}
-                          benefById={benefById}
-                          onDragStart={onDragStart}
-                          onDrop={onDropOnGroupe}
-                        />
-                      ))}
-                    </div>
+            {/* Corps */}
+            <div className="px-5 py-4">
+              {pasDeCompetence && !brouillon && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <AlertTriangle size={12} />
+                  Aucune compétence ciblée n&apos;est cochée pour cet atelier. Édite l&apos;atelier pour en cocher au moins une.
+                </p>
+              )}
+
+              {brouillon && brouillon.parametres.erreurs.length > 0 && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+                  <p className="font-semibold mb-1 flex items-center gap-1"><AlertTriangle size={12} /> Génération impossible</p>
+                  <ul className="list-disc pl-4">
+                    {brouillon.parametres.erreurs.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {brouillon && brouillon.groupes.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {brouillon.groupes.map(g => (
+                    <GroupeCard
+                      key={g.id}
+                      groupe={g}
+                      atelierId={atelier.id}
+                      dims={atelier.competencesCiblees}
+                      benefById={benefById}
+                      onDragStart={onDragStart}
+                      onDrop={onDropOnGroupe}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Buckets — bénéficiaires non placés */}
+              {brouillon && (brouillon.aEvaluer.length + brouillon.horsTranche.length > 0) && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {brouillon.aEvaluer.length > 0 && (
+                    <BucketCard
+                      color="amber"
+                      icon={<AlertTriangle size={11} />}
+                      titre={`À évaluer (${brouillon.aEvaluer.length})`}
+                      sousTitre="Aucune note initiale renseignée"
+                      membres={brouillon.aEvaluer.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
+                    />
                   )}
-
-                  {/* Buckets — bénéficiaires non placés */}
-                  {brouillon && (brouillon.aEvaluer.length + brouillon.horsTranche.length > 0) && (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {brouillon.aEvaluer.length > 0 && (
-                        <BucketCard
-                          color="amber"
-                          icon={<AlertTriangle size={11} />}
-                          titre={`À évaluer (${brouillon.aEvaluer.length})`}
-                          sousTitre="Aucune note initiale renseignée"
-                          membres={brouillon.aEvaluer.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
-                        />
-                      )}
-                      {brouillon.horsTranche.length > 0 && (
-                        <BucketCard
-                          color="slate"
-                          icon={<Users size={11} />}
-                          titre={`Hors tranche d'âge (${brouillon.horsTranche.length})`}
-                          sousTitre={`Cible : ${atelier.ageMin}-${atelier.ageMax} ans`}
-                          membres={brouillon.horsTranche.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {brouillon && (
-                    <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted">
-                      <span>
-                        Généré le {new Date(brouillon.generedAt).toLocaleString("fr-FR")} · Mode <b>{brouillon.parametres.mode}</b>
-                      </span>
-                      <button onClick={() => supprimerBrouillon(atelier.id)} className="hover:text-foreground hover:underline">
-                        <RotateCcw size={10} className="inline mr-1" /> Abandonner ce brouillon
-                      </button>
-                    </div>
+                  {brouillon.horsTranche.length > 0 && (
+                    <BucketCard
+                      color="slate"
+                      icon={<Users size={11} />}
+                      titre={`Hors tranche d'âge (${brouillon.horsTranche.length})`}
+                      sousTitre={`Cible : ${atelier.ageMin}-${atelier.ageMax} ans`}
+                      membres={brouillon.horsTranche.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
+                    />
                   )}
                 </div>
-              </article>
-            )
-          })}
-        </div>
-      )}
+              )}
+
+              {brouillon && (
+                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted">
+                  <span>
+                    Généré le {new Date(brouillon.generedAt).toLocaleString("fr-FR")} · Mode <b>{brouillon.parametres.mode}</b>
+                  </span>
+                  <button onClick={() => supprimerBrouillon(atelier.id)} className="hover:text-foreground hover:underline">
+                    <RotateCcw size={10} className="inline mr-1" /> Abandonner ce brouillon
+                  </button>
+                </div>
+              )}
+            </div>
+          </article>
+        )
+      })}
 
       {/* ── SlideOver paramètres de régénération ── */}
       <SlideOver
@@ -417,7 +372,7 @@ export default function BrouillonGroupesPage() {
       >
         <form onSubmit={e => { e.preventDefault(); validerParametres() }} className="flex flex-col gap-4">
           <p className="text-xs text-muted">
-            Modifie les paramètres ci-dessous pour relancer l'algorithme.
+            Modifie les paramètres ci-dessous pour relancer l&apos;algorithme.
             Le brouillon actuel sera remplacé.
           </p>
           <Field label="Taille de groupe cible">
@@ -548,22 +503,3 @@ function BucketCard(props: {
     </div>
   )
 }
-
-function EtatVide(props: {
-  icon: React.ReactNode
-  titre: string
-  message: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="text-center py-20 bg-surface rounded-xl border border-border">
-      <div className="mx-auto mb-4 inline-flex p-3 rounded-full bg-slate-50">
-        {props.icon}
-      </div>
-      <p className="font-semibold text-foreground">{props.titre}</p>
-      <p className="text-sm text-muted mt-1 max-w-md mx-auto">{props.message}</p>
-      {props.action && <div className="mt-4">{props.action}</div>}
-    </div>
-  )
-}
-

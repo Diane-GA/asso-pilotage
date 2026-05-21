@@ -36,7 +36,7 @@ intelligent plutôt que d'une page blanche.
 2. Créer un atelier + cocher les thématiques → onglet Ateliers
    pertinentes pour cet atelier
        ↓ génération automatique
-3. Voir le brouillon proposé                 → onglet Brouillon groupes
+3. Voir le brouillon proposé                 → sous-onglet "Brouillon groupes" de la page Ateliers
        ↓ drag & drop pour ajuster
 4. Valider la composition                    → groupes créés dans Ateliers
 ```
@@ -110,8 +110,9 @@ Cette section ne nourrit pas l'algorithme mais sert au suivi opérationnel :
 ## Étape 3 — Consulter le brouillon proposé
 
 Dès que tu cliques sur "Enregistrer", **un brouillon est généré automatiquement**.
-Un toast orange apparaît en bas à droite avec un lien direct vers l'onglet
-**Brouillon groupes**.
+Un toast orange apparaît en bas à droite avec un lien "Voir →" qui bascule
+sur le sous-onglet **Brouillon groupes** (3e onglet de la page Ateliers, à
+côté de "Ateliers" et "Groupes").
 
 Sur cet écran, pour chaque atelier :
 
