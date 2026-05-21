@@ -1,0 +1,318 @@
+// ──────────────────────────────────────────────
+// Composition de groupes — algorithme du Lot 3
+// ──────────────────────────────────────────────
+// Prend en entrée la fiche descriptive d'un atelier (compétences ciblées,
+// tranche d'âge, taille de groupe, mode homogène/hétérogène) et la liste
+// des bénéficiaires (avec leurs notes du test initial), et produit un
+// brouillon de groupes que les collaboratrices pourront ajuster.
+//
+// Principe de l'algorithme :
+//   1. On filtre les bénéficiaires : statut actif, âge dans la tranche,
+//      au moins une note initiale renseignée sur les thématiques cochées.
+//   2. On regroupe par tranche d'âge (barrière dure : 6-9, 10-13, 14-18).
+//   3. Dans chaque tranche, on trie par notes — tri lexicographique sur
+//      les thématiques cochées (pas une moyenne, pour garder l'information
+//      par dimension : deux profils avec la même moyenne mais des notes
+//      très différentes sur chaque axe ne se retrouvent PAS ensemble).
+//   4. Selon le mode :
+//      • Homogène (défaut) : on slice le tri en N groupes consécutifs.
+//      • Hétérogène : on distribue les bénéficiaires en round-robin.
+//   5. On calcule pour chaque groupe le nombre d'encadrants requis (si
+//      l'atelier impose un ratio) et un score de cohésion (0-100).
+
+import type { Thematique, NotesPositionnement } from "./positionnement"
+import type { FicheAtelier } from "./atelier"
+import { TRANCHES_AGE, trancheFor, encadrantsRequis, type TrancheAge } from "./atelier"
+
+// ──────────────────────────────────────────────
+// Types publics
+// ──────────────────────────────────────────────
+
+export interface BeneficiairePourGroupage {
+  id: number
+  prenom: string
+  nom: string
+  dateNaissance: string
+  statut: string
+  positionnementInitial: NotesPositionnement
+}
+
+export interface GroupeBrouillon {
+  /** Identifiant local (string pour éviter les collisions avec les ids existants). */
+  id: string
+  nom: string
+  tranche: TrancheAge | null
+  beneficiaireIds: number[]
+  /** Encadrants requis selon le ratio de l'atelier — null si pas de ratio défini. */
+  encadrantsRequis: number | null
+  /** Indicateur 0-100 d'homogénéité du groupe sur les thématiques ciblées.
+   *  100 = identiques, 0 = très dispersé. */
+  scoreCohesion: number
+}
+
+export interface ParametresComposition {
+  mode: "homogène" | "hétérogène"
+  tailleGroupeCible: number
+  competencesCiblees: Thematique[]
+  erreurs: string[]
+}
+
+export interface Brouillon {
+  /** Identifiant de l'atelier à laquelle ce brouillon est rattaché. */
+  atelierId: number
+  /** Date de génération (ISO). */
+  generedAt: string
+  groupes: GroupeBrouillon[]
+  /** Bénéficiaires non placés : aucune note initiale renseignée. */
+  aEvaluer: number[]
+  /** Bénéficiaires non placés : âge en dehors de [ageMin, ageMax]. */
+  horsTranche: number[]
+  /** Bénéficiaires non placés : statut non actif. */
+  exclusStatut: number[]
+  parametres: ParametresComposition
+}
+
+// ──────────────────────────────────────────────
+// Helpers internes
+// ──────────────────────────────────────────────
+
+function ageOf(dateNaissance: string): number | null {
+  if (!dateNaissance) return null
+  const an = new Date(dateNaissance).getFullYear()
+  if (isNaN(an)) return null
+  return new Date().getFullYear() - an
+}
+
+/** Construit le vecteur de notes du bénéficiaire sur les thématiques ciblées.
+ *  Une note manquante est traitée comme 0 pour le tri (mais elle compte dans
+ *  le filtre "aEvaluer" — si TOUTES les notes sont null, on ne place pas). */
+function vecteurNotes(b: BeneficiairePourGroupage, dims: Thematique[]): number[] {
+  return dims.map(d => b.positionnementInitial[d] ?? 0)
+}
+
+/** Au moins une note renseignée sur les thématiques ciblées. */
+function aAuMoinsUneNote(b: BeneficiairePourGroupage, dims: Thematique[]): boolean {
+  return dims.some(d => b.positionnementInitial[d] !== null)
+}
+
+/** Comparateur lexicographique multi-dimensions (descendant = forts d'abord).
+ *  Garantit que deux bénéficiaires aux mêmes notes restent dans l'ordre stable. */
+function compareLex(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return b[i] - a[i]   // descendant
+  }
+  return 0
+}
+
+/** Score de cohésion d'un groupe : 100 - (moyenne des écarts max-min par dim, ramenée sur 100). */
+function scoreCohesion(
+  membres: BeneficiairePourGroupage[],
+  dims: Thematique[],
+): number {
+  if (membres.length <= 1 || dims.length === 0) return 100
+  const ecarts = dims.map(d => {
+    const notes = membres
+      .map(m => m.positionnementInitial[d])
+      .filter((n): n is number => n !== null)
+    if (notes.length < 2) return 0
+    return Math.max(...notes) - Math.min(...notes)
+  })
+  const ecartMoyen = ecarts.reduce((a, b) => a + b, 0) / dims.length
+  // Note sur 20, donc max d'écart = 20. On ramène sur 100.
+  return Math.round(Math.max(0, 100 - (ecartMoyen / 20) * 100))
+}
+
+/** Découpe une liste en N sous-listes consécutives de taille équilibrée. */
+function sliceEnGroupes<T>(items: T[], nGroupes: number): T[][] {
+  const result: T[][] = Array.from({ length: nGroupes }, () => [])
+  const tailleBase = Math.floor(items.length / nGroupes)
+  const reste = items.length % nGroupes
+  let cursor = 0
+  for (let i = 0; i < nGroupes; i++) {
+    const taille = tailleBase + (i < reste ? 1 : 0)
+    result[i] = items.slice(cursor, cursor + taille)
+    cursor += taille
+  }
+  return result
+}
+
+/** Distribue une liste en N sous-listes en round-robin (mélange des niveaux). */
+function repartirRoundRobin<T>(items: T[], nGroupes: number): T[][] {
+  const result: T[][] = Array.from({ length: nGroupes }, () => [])
+  items.forEach((item, i) => result[i % nGroupes].push(item))
+  return result
+}
+
+// ──────────────────────────────────────────────
+// API publique
+// ──────────────────────────────────────────────
+
+export function composerGroupes(
+  atelier: Pick<
+    FicheAtelier,
+    "competencesCiblees" | "ageMin" | "ageMax" | "tailleGroupeCible" | "ratioEncadrement" | "mixerNiveaux"
+  > & { id: number; titre: string },
+  beneficiaires: BeneficiairePourGroupage[],
+): Brouillon {
+  const dims = atelier.competencesCiblees
+  const taille = atelier.tailleGroupeCible ?? 10
+  const erreurs: string[] = []
+
+  // ── 1. Validation des paramètres ──
+  if (dims.length === 0) {
+    erreurs.push(
+      "Aucune compétence ciblée n'est cochée pour cet atelier. Cochez au moins une thématique du test de positionnement pour que l'algorithme puisse comparer les notes.",
+    )
+  }
+  if (taille < 2) {
+    erreurs.push("La taille de groupe cible doit être au moins 2.")
+  }
+
+  // ── 2. Tri des bénéficiaires en buckets (actifs / à évaluer / hors tranche / exclus) ──
+  const exclusStatut: number[] = []
+  const horsTranche:  number[] = []
+  const aEvaluer:     number[] = []
+  const eligibles:    BeneficiairePourGroupage[] = []
+
+  for (const b of beneficiaires) {
+    if (b.statut !== "actif") {
+      exclusStatut.push(b.id)
+      continue
+    }
+    const age = ageOf(b.dateNaissance)
+    if (
+      age !== null &&
+      ((atelier.ageMin !== null && age < atelier.ageMin) ||
+        (atelier.ageMax !== null && age > atelier.ageMax))
+    ) {
+      horsTranche.push(b.id)
+      continue
+    }
+    if (dims.length > 0 && !aAuMoinsUneNote(b, dims)) {
+      aEvaluer.push(b.id)
+      continue
+    }
+    eligibles.push(b)
+  }
+
+  // Si on est en erreur ou plus de bénéficiaires éligibles → brouillon vide
+  if (erreurs.length > 0 || eligibles.length === 0) {
+    return {
+      atelierId: atelier.id,
+      generedAt: new Date().toISOString(),
+      groupes: [],
+      aEvaluer,
+      horsTranche,
+      exclusStatut,
+      parametres: {
+        mode: atelier.mixerNiveaux ? "hétérogène" : "homogène",
+        tailleGroupeCible: taille,
+        competencesCiblees: dims,
+        erreurs,
+      },
+    }
+  }
+
+  // ── 3. Regroupement par tranche d'âge (barrière dure) ──
+  // Si l'atelier impose une tranche unique, le filtre âgeMin/âgeMax l'a déjà appliquée.
+  // On regroupe quand même par tranche pour produire des noms et stats par tranche
+  // si jamais l'atelier accepte une plage qui chevauche plusieurs tranches.
+  const parTranche = new Map<TrancheAge | "hors", BeneficiairePourGroupage[]>()
+  for (const b of eligibles) {
+    const age = ageOf(b.dateNaissance)
+    const tr  = trancheFor(age) ?? "hors"
+    if (!parTranche.has(tr)) parTranche.set(tr, [])
+    parTranche.get(tr)!.push(b)
+  }
+
+  // ── 4. Pour chaque tranche : tri + slicing / round-robin ──
+  const groupes: GroupeBrouillon[] = []
+  let groupeIndex = 1
+
+  for (const tranche of [...TRANCHES_AGE.map(t => t.key), "hors" as const]) {
+    const lot = parTranche.get(tranche) ?? []
+    if (lot.length === 0) continue
+
+    // Tri lexicographique sur les thématiques ciblées (descendant)
+    const trie = [...lot].sort((a, b) =>
+      compareLex(vecteurNotes(a, dims), vecteurNotes(b, dims)),
+    )
+
+    const nGroupes = Math.max(1, Math.ceil(trie.length / taille))
+    const repartition = atelier.mixerNiveaux
+      ? repartirRoundRobin(trie, nGroupes)
+      : sliceEnGroupes(trie, nGroupes)
+
+    repartition.forEach((membres, i) => {
+      const trancheLabel = tranche === "hors"
+        ? "hors tranche"
+        : TRANCHES_AGE.find(t => t.key === tranche)?.label ?? tranche
+      groupes.push({
+        id: `${atelier.id}-${tranche}-${i + 1}`,
+        nom: `${atelier.titre} · ${trancheLabel} · Groupe ${groupeIndex++}`,
+        tranche: tranche === "hors" ? null : tranche,
+        beneficiaireIds: membres.map(m => m.id),
+        encadrantsRequis: encadrantsRequis(atelier.ratioEncadrement, membres.length),
+        scoreCohesion: scoreCohesion(membres, dims),
+      })
+    })
+  }
+
+  return {
+    atelierId: atelier.id,
+    generedAt: new Date().toISOString(),
+    groupes,
+    aEvaluer,
+    horsTranche,
+    exclusStatut,
+    parametres: {
+      mode: atelier.mixerNiveaux ? "hétérogène" : "homogène",
+      tailleGroupeCible: taille,
+      competencesCiblees: dims,
+      erreurs,
+    },
+  }
+}
+
+// ──────────────────────────────────────────────
+// Storage helpers (localStorage, en attendant le Google Sheet)
+// ──────────────────────────────────────────────
+// Un seul brouillon actif par atelier : `asso-brouillon-groupes-{atelierId}`.
+// Régénérer = écraser. Valider = supprimer la clé après bascule dans les vrais groupes.
+
+export const S_BROUILLON = (atelierId: number) => `asso-brouillon-groupes-${atelierId}`
+
+export function saveBrouillon(b: Brouillon): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(S_BROUILLON(b.atelierId), JSON.stringify(b))
+}
+
+export function loadBrouillon(atelierId: number): Brouillon | null {
+  if (typeof window === "undefined") return null
+  try {
+    const s = localStorage.getItem(S_BROUILLON(atelierId))
+    return s ? (JSON.parse(s) as Brouillon) : null
+  } catch {
+    return null
+  }
+}
+
+export function deleteBrouillon(atelierId: number): void {
+  if (typeof window === "undefined") return
+  localStorage.removeItem(S_BROUILLON(atelierId))
+}
+
+/** Liste tous les brouillons actifs (utile pour l'écran "Brouillon groupes"). */
+export function listBrouillons(): Brouillon[] {
+  if (typeof window === "undefined") return []
+  const result: Brouillon[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith("asso-brouillon-groupes-")) continue
+    try {
+      const s = localStorage.getItem(key)
+      if (s) result.push(JSON.parse(s) as Brouillon)
+    } catch { /* ignore */ }
+  }
+  return result
+}
