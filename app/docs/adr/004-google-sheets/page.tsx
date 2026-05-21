@@ -94,12 +94,30 @@ export async function updatePresence(sessionId: number, benefId: number, statut:
 
       <section className="space-y-4">
         <h2 className="text-xl font-bold text-foreground mt-2">Structure des Google Sheets attendue</h2>
+        <p className="text-sm text-muted">
+          Le chantier 2.1 (composition de groupes) a ajouté plusieurs colonnes pour porter
+          les notes détaillées du test de positionnement, la fiche descriptive de chaque
+          atelier et l&apos;état brouillon/validé des groupes.
+        </p>
 
         <h3 className="text-base font-semibold text-foreground">Sheet &quot;Bénéficiaires&quot;</h3>
-        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`id | prenom | nom | dateNaissance | nomParent | telephoneParent | emailParent | noteEvaluation | niveau | statut`}</pre>
+        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`id | prenom | nom | dateNaissance | email | telephone | nomParent | telephoneParent | emailParent | dateInscription | niveau | statut | notes
+init_comprehensionEcrite | init_comprehensionOrale | init_expressionEcrite | init_expressionOrale
+final_comprehensionEcrite | final_comprehensionOrale | final_expressionEcrite | final_expressionOrale`}</pre>
 
         <h3 className="text-base font-semibold text-foreground">Sheet &quot;Ateliers&quot;</h3>
-        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`id | titre | date | heure | salle | formatrice | statut`}</pre>
+        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`id | titre | description | date | heure | duree | salle | formatrice | statut
+ageMin | ageMax | tailleGroupeCible | ratioEncadrement | mixerNiveaux
+comp_comprehensionEcrite | comp_comprehensionOrale | comp_expressionEcrite | comp_expressionOrale
+taches | besoins | etapes | personnesImpliqueesIds
+beneficiaireIds | benevoleIds`}</pre>
+
+        <h3 className="text-base font-semibold text-foreground">Sheet &quot;Groupes&quot;</h3>
+        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`id | nom | atelierId | type | description | beneficiaireIds | etat | dateValidation`}</pre>
+        <p className="text-xs text-muted">
+          <code>etat</code> : <code>brouillon</code> (proposition de l&apos;algo non validée)
+          ou <code>valide</code> (composition officielle).
+        </p>
 
         <h3 className="text-base font-semibold text-foreground">Sheet &quot;Présences&quot;</h3>
         <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`sessionId | beneficiaireId | statut | date`}</pre>

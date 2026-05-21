@@ -233,18 +233,29 @@ L'association gère ses données dans Google Sheets. Trois phases d'intégration
 | Phase 2 | Google Apps Script (webhook HTTP) | Prévu |
 | Phase 3 | Migration Supabase complète | Long terme |
 
-**Structure attendue des Google Sheets** :
+**Structure attendue des Google Sheets** (mise à jour chantier 2.1 — composition de groupes) :
 
 Sheet **"Bénéficiaires"** :
-`id | prenom | nom | dateNaissance | nomParent | telephoneParent | emailParent | noteEvaluation | niveau | statut`
+- Identité : `id | prenom | nom | dateNaissance | email | telephone | nomParent | telephoneParent | emailParent | dateInscription | niveau | statut | notes`
+- Notes test initial : `init_comprehensionEcrite | init_comprehensionOrale | init_expressionEcrite | init_expressionOrale`
+- Notes test final : `final_comprehensionEcrite | final_comprehensionOrale | final_expressionEcrite | final_expressionOrale`
 
 Sheet **"Ateliers"** :
-`id | titre | date | heure | salle | formatrice | statut`
+- Identité : `id | titre | description | date | heure | duree | salle | formatrice | statut`
+- Public : `ageMin | ageMax | tailleGroupeCible | ratioEncadrement | mixerNiveaux`
+- Compétences ciblées : `comp_comprehensionEcrite | comp_comprehensionOrale | comp_expressionEcrite | comp_expressionOrale`
+- Organisation (JSON) : `taches | besoins | etapes | personnesImpliqueesIds`
+- Participants : `beneficiaireIds | benevoleIds`
+
+Sheet **"Groupes"** :
+`id | nom | atelierId | type | description | beneficiaireIds | etat | dateValidation`
+> `etat` ∈ {`brouillon`, `valide`}
 
 Sheet **"Présences"** :
 `sessionId | beneficiaireId | statut | date`
 
-> Voir `docs/explanation/adr/004-google-sheets-integration.md` pour le détail technique.
+> Voir `docs/explanation/adr/004-google-sheets-integration.md` (mapping détaillé)
+> et `docs/how-to/composition-groupes.md` (guide d'utilisation).
 
 ---
 

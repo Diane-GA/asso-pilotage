@@ -76,13 +76,54 @@ travailler sans attendre une intégration complexe.
 
 ## Structure des Google Sheets attendue
 
-Pour que l'intégration fonctionne, les sheets doivent avoir ces colonnes :
+Pour que l'intégration fonctionne, les sheets doivent avoir ces colonnes.
+Le chantier 2.1 "Aide à la composition des groupes" a ajouté plusieurs
+colonnes pour porter les notes détaillées du test de positionnement, la
+fiche descriptive de chaque atelier, et l'état brouillon/validé des
+groupes — détails dans `docs/how-to/composition-groupes.md`.
 
 ### Sheet "Bénéficiaires"
-| id | prenom | nom | dateNaissance | nomParent | telephoneParent | emailParent | noteEvaluation | niveau | statut |
+
+Identité & contact :
+| id | prenom | nom | dateNaissance | email | telephone | nomParent | telephoneParent | emailParent | dateInscription | niveau | statut | notes |
+
+Notes du test de positionnement initial (sert à la composition de groupes) :
+| init_comprehensionEcrite | init_comprehensionOrale | init_expressionEcrite | init_expressionOrale |
+
+Notes du test de positionnement final (mesure d'impact, optionnel) :
+| final_comprehensionEcrite | final_comprehensionOrale | final_expressionEcrite | final_expressionOrale |
+
+> Toutes les notes sont sur 20, ou vides si non évaluées. Si les 4 notes
+> initiales sont vides, le bénéficiaire est marqué "à évaluer avant
+> attribution" et n'est pas placé automatiquement dans les groupes.
 
 ### Sheet "Ateliers"
-| id | titre | date | heure | salle | formatrice | statut |
+
+Identité & planning :
+| id | titre | description | date | heure | duree | salle | formatrice | statut |
+
+Public ciblé & paramètres de composition :
+| ageMin | ageMax | tailleGroupeCible | ratioEncadrement | mixerNiveaux |
+
+Compétences ciblées (4 colonnes booléennes : VRAI/FAUX) :
+| comp_comprehensionEcrite | comp_comprehensionOrale | comp_expressionEcrite | comp_expressionOrale |
+
+Organisation (chaînes JSON sérialisées — listes éditables côté app) :
+| taches | besoins | etapes | personnesImpliqueesIds |
+
+Participants :
+| beneficiaireIds | benevoleIds |
+
+### Sheet "Groupes"
+
+| id | nom | atelierId | type | description | beneficiaireIds | etat | dateValidation |
+
+- `type` : `niveau` (homogène) / `mixte` (hétérogène) / `âge`
+- `etat` : `brouillon` (proposition de l'algo, non validée) / `valide` (composition officielle)
+- `dateValidation` : ISO, vide tant que le groupe est en brouillon
+
+> Un groupe peut basculer de `brouillon` à `valide` après ajustement humain.
+> Inversement, on supprime simplement la ligne pour abandonner un brouillon.
 
 ### Sheet "Présences"
 | sessionId | beneficiaireId | statut | date |
