@@ -21,7 +21,7 @@ import {
 import SlideOver, { Field, Input, SaveButton } from "@/components/SlideOver"
 import {
   Shuffle, RotateCcw, CheckCircle2, AlertTriangle, Users,
-  GraduationCap, UserCheck, Sparkles, Settings, Pencil, X, Plus,
+  GraduationCap, UserCheck, Sparkles, Settings, X, Plus,
 } from "lucide-react"
 
 // ──────────────────────────────────────────────
@@ -104,14 +104,14 @@ export default function BrouillonGroupesTab(props: {
   /** Appelé quand la collaboratrice valide un brouillon : le parent ajoute les
    *  nouveaux groupes à son state, ce qui les rend visibles dans l'onglet Groupes. */
   onGroupesValides: (newGroupes: Groupe[]) => void
+  /** Optionnel : bascule automatiquement sur un autre onglet après validation
+   *  (par défaut on bascule sur "Groupes" pour montrer le résultat). */
+  onValidated?: (nbGroupes: number) => void
 }) {
-  const { sessions, beneficiaires, onGroupesValides } = props
+  const { sessions, beneficiaires, onGroupesValides, onValidated } = props
 
   /** Brouillons indexés par atelierId. */
   const [brouillons, setBrouillons] = useState<Record<number, Brouillon | null>>({})
-
-  /** Groupe en cours de modification manuelle (id local du GroupeBrouillon). */
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
 
   // SlideOver "régénérer avec paramètres"
   interface ParamForm {
@@ -188,13 +188,6 @@ export default function BrouillonGroupesTab(props: {
   }
 
   // ── Modification manuelle ──
-  function toggleEdit(groupeId: string) {
-    // Re-clic sur le même groupe → quitter le mode édition. Sinon basculer
-    // sur le groupe demandé (au plus un groupe en édition à la fois pour
-    // garder l'UI lisible).
-    setEditingGroupId(prev => prev === groupeId ? null : groupeId)
-  }
-
   function removeMember(atelierId: number, groupeId: string, benefId: number) {
     const b = brouillons[atelierId]
     if (!b) return
@@ -242,6 +235,9 @@ export default function BrouillonGroupesTab(props: {
 
   function validerComposition(atelier: Session, brouillon: Brouillon) {
     const baseId = Date.now()
+    // On lit les groupes depuis l'état courant du brouillon, donc tous les
+    // ajouts/suppressions manuels et drag-drops faits avant le clic Valider
+    // sont bien inclus.
     const nouveaux: Groupe[] = brouillon.groupes.map((g, i) => ({
       id: baseId + i,
       nom: g.nom,
@@ -251,7 +247,8 @@ export default function BrouillonGroupesTab(props: {
     }))
     onGroupesValides(nouveaux)
     supprimerBrouillon(atelier.id)
-    alert(`${nouveaux.length} groupe(s) ajouté(s) au sous-onglet Groupes.`)
+    // Bascule sur l'onglet Groupes pour montrer le résultat immédiatement.
+    onValidated?.(nouveaux.length)
   }
 
   // ── Drag & drop ──
@@ -404,8 +401,6 @@ export default function BrouillonGroupesTab(props: {
                       benefById={benefById}
                       onDragStart={onDragStart}
                       onDrop={onDropOnGroupe}
-                      editing={editingGroupId === g.id}
-                      onToggleEdit={() => toggleEdit(g.id)}
                       onRemoveMember={benefId => removeMember(atelier.id, g.id, benefId)}
                       onAddMember={benefId => addMember(atelier.id, g.id, benefId)}
                       benefsLibres={getBenefsLibres(brouillon)}
@@ -598,16 +593,16 @@ function GroupeCard(props: {
   benefById: (id: number) => Beneficiaire | undefined
   onDragStart: (benefId: number, fromGroupeId: string, atelierId: number) => void
   onDrop: (toGroupeId: string, atelierId: number) => void
-  /** Mode édition manuelle : croix sur chaque membre + bouton "+ Ajouter". */
-  editing: boolean
-  onToggleEdit: () => void
+  /** Retirer un membre — déclenché par la croix au hover sur la ligne. */
   onRemoveMember: (benefId: number) => void
+  /** Ajouter un membre — déclenché depuis la popover du bouton "+ Ajouter". */
   onAddMember: (benefId: number) => void
+  /** Bénéficiaires actifs non placés ailleurs (pool dans la popover). */
   benefsLibres: Beneficiaire[]
 }) {
   const {
     groupe, atelierId, dims, benefById, onDragStart, onDrop,
-    editing, onToggleEdit, onRemoveMember, onAddMember, benefsLibres,
+    onRemoveMember, onAddMember, benefsLibres,
   } = props
   const [over, setOver] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -618,11 +613,7 @@ function GroupeCard(props: {
       onDragLeave={() => setOver(false)}
       onDrop={e => { e.preventDefault(); setOver(false); onDrop(groupe.id, atelierId) }}
       className={`rounded-xl border bg-surface transition-colors ${
-        editing
-          ? "border-ateliers ring-2 ring-ateliers/20"
-          : over
-            ? "border-ateliers ring-2 ring-ateliers/20"
-            : "border-border"
+        over ? "border-ateliers ring-2 ring-ateliers/20" : "border-border"
       }`}
     >
       <header className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 flex-wrap">
@@ -639,23 +630,13 @@ function GroupeCard(props: {
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${cohesionColor(groupe.scoreCohesion)}`}>
             cohésion {groupe.scoreCohesion}%
           </span>
-          <button
-            type="button"
-            onClick={onToggleEdit}
-            title={editing ? "Terminer l'édition" : "Modifier la composition"}
-            className={`p-1 rounded transition-colors ${
-              editing ? "bg-ateliers text-white" : "text-muted hover:bg-slate-100 hover:text-foreground"
-            }`}
-          >
-            {editing ? <CheckCircle2 size={11} /> : <Pencil size={11} />}
-          </button>
         </div>
       </header>
 
       <ul className="px-2 py-2 flex flex-col gap-1 min-h-[60px]">
         {groupe.beneficiaireIds.length === 0 && (
           <li className="text-[11px] text-muted italic text-center py-3">
-            {editing ? "Aucun membre — utilise le bouton + ci-dessous." : "Glisse un bénéficiaire ici"}
+            Glisse ou ajoute un bénéficiaire.
           </li>
         )}
         {groupe.beneficiaireIds.map(id => {
@@ -665,11 +646,9 @@ function GroupeCard(props: {
           return (
             <li
               key={b.id}
-              draggable={!editing}
+              draggable
               onDragStart={() => onDragStart(b.id, groupe.id, atelierId)}
-              className={`flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-50 ${
-                editing ? "" : "cursor-grab active:cursor-grabbing"
-              }`}
+              className="group/member flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-50 cursor-grab active:cursor-grabbing"
             >
               <GraduationCap size={12} className="text-ateliers-dark shrink-0" />
               <span className="text-xs font-medium text-foreground">{b.prenom} {b.nom}</span>
@@ -683,72 +662,86 @@ function GroupeCard(props: {
                     </span>
                   )
                 })}
-                {editing && (
-                  <button
-                    type="button"
-                    onClick={() => onRemoveMember(b.id)}
-                    title={`Retirer ${b.prenom} ${b.nom} du groupe`}
-                    className="ml-1 p-1 rounded text-red-600 hover:bg-red-50"
-                  >
-                    <X size={11} />
-                  </button>
-                )}
+                {/* Croix toujours présente, mais visible seulement au hover de la ligne
+                    pour ne pas surcharger visuellement. Stop propagation pour ne
+                    pas déclencher le drag. */}
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); onRemoveMember(b.id) }}
+                  onMouseDown={e => e.stopPropagation()}
+                  title={`Retirer ${b.prenom} ${b.nom} du groupe`}
+                  className="ml-1 p-1 rounded text-red-600 hover:bg-red-50 opacity-0 group-hover/member:opacity-100 transition-opacity"
+                  aria-label={`Retirer ${b.prenom} ${b.nom}`}
+                >
+                  <X size={11} />
+                </button>
               </span>
             </li>
           )
         })}
       </ul>
 
-      {/* Bouton +Ajouter + popover en mode édition */}
-      {editing && (
-        <div className="px-2 pb-2 border-t border-border/50 pt-2 relative">
-          <button
-            type="button"
-            onClick={() => setAddOpen(o => !o)}
-            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-ateliers-dark hover:bg-ateliers-light/50 rounded-md py-1.5"
-          >
-            <Plus size={11} /> Ajouter un élève {addOpen && <span className="text-muted">(referme)</span>}
-          </button>
-          {addOpen && (
-            <div className="absolute left-2 right-2 top-full mt-1 z-10 bg-surface border border-border rounded-xl shadow-lg max-h-64 overflow-y-auto">
-              {benefsLibres.length === 0 ? (
-                <p className="text-[11px] text-muted italic text-center py-4">
-                  Aucun bénéficiaire libre à ajouter.
-                </p>
-              ) : (
-                <ul className="py-1">
-                  {benefsLibres.map(b => {
-                    const age = computeAge(b.dateNaissance)
-                    return (
-                      <li key={b.id}>
-                        <button
-                          type="button"
-                          onClick={() => { onAddMember(b.id); setAddOpen(false) }}
-                          className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50"
-                        >
-                          <GraduationCap size={11} className="text-muted shrink-0" />
-                          <span className="font-medium text-foreground">{b.prenom} {b.nom}</span>
-                          {age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
-                          <span className="ml-auto flex gap-1">
-                            {dims.map(d => {
-                              const n = b.positionnementInitial[d]
-                              return (
-                                <span key={d} className="text-[10px] text-muted tabular-nums">
-                                  {n ?? "—"}
-                                </span>
-                              )
-                            })}
-                          </span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Bouton "+ Ajouter un élève" toujours visible en bas du groupe */}
+      <div className="px-2 pb-2 border-t border-border/50 pt-2 relative">
+        <button
+          type="button"
+          onClick={() => setAddOpen(o => !o)}
+          className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-ateliers-dark hover:bg-ateliers-light/50 rounded-md py-1.5"
+        >
+          <Plus size={11} /> Ajouter un élève
+        </button>
+        {addOpen && (
+          <div className="absolute left-2 right-2 top-full mt-1 z-10 bg-surface border border-border rounded-xl shadow-lg max-h-64 overflow-y-auto">
+            <header className="px-3 py-1.5 border-b border-border flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
+                Bénéficiaires libres
+              </span>
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                className="text-muted hover:text-foreground"
+                aria-label="Fermer"
+              >
+                <X size={11} />
+              </button>
+            </header>
+            {benefsLibres.length === 0 ? (
+              <p className="text-[11px] text-muted italic text-center py-4">
+                Aucun bénéficiaire libre à ajouter.
+              </p>
+            ) : (
+              <ul className="py-1">
+                {benefsLibres.map(b => {
+                  const age = computeAge(b.dateNaissance)
+                  return (
+                    <li key={b.id}>
+                      <button
+                        type="button"
+                        onClick={() => { onAddMember(b.id); setAddOpen(false) }}
+                        className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50"
+                      >
+                        <GraduationCap size={11} className="text-muted shrink-0" />
+                        <span className="font-medium text-foreground">{b.prenom} {b.nom}</span>
+                        {age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
+                        <span className="ml-auto flex gap-1">
+                          {dims.map(d => {
+                            const n = b.positionnementInitial[d]
+                            return (
+                              <span key={d} className="text-[10px] text-muted tabular-nums">
+                                {n ?? "—"}
+                              </span>
+                            )
+                          })}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

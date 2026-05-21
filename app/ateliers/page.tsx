@@ -731,6 +731,10 @@ export default function AteliersPage() {
           sessions={sessions}
           beneficiaires={beneficiaires}
           onGroupesValides={(nouveaux) => persistGroupes([...groupes, ...nouveaux])}
+          onValidated={() => {
+            // Bascule sur l'onglet Groupes pour montrer immédiatement le résultat.
+            setTab("groupes")
+          }}
         />
       )}
 
