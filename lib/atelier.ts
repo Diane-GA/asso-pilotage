@@ -37,7 +37,15 @@ export function trancheFor(age: number | null): TrancheAge | null {
 // Fiche descriptive — nouveaux champs étendus
 // ──────────────────────────────────────────────
 
+/** Public visé par un atelier. "eleves" (enfants) par défaut pour
+ *  rétrocompatibilité — les anciens ateliers étaient tous pour les élèves. */
+export type AudienceAtelier = "eleves" | "parents"
+
 export interface FicheAtelier {
+  /** Public visé : determine la pool de bénéficiaires utilisée par l'algo
+   *  de composition. */
+  audience: AudienceAtelier
+
   /** Thématiques évaluées par le test de positionnement qui sont pertinentes
    *  pour cet atelier. L'algorithme se base sur les notes de ces thématiques. */
   competencesCiblees: Thematique[]
@@ -75,6 +83,7 @@ export interface FicheAtelier {
 
 export function emptyFiche(): FicheAtelier {
   return {
+    audience: "eleves",
     competencesCiblees: [],
     ageMin: null,
     ageMax: null,
@@ -108,6 +117,7 @@ export function migrateFiche<T extends FicheAtelierLegacy>(s: T): T & FicheAteli
   }
   return {
     ...s,
+    audience:               s.audience               ?? "eleves",
     competencesCiblees:     s.competencesCiblees     ?? [],
     ageMin:                 s.ageMin                 ?? null,
     ageMax:                 s.ageMax                 ?? null,

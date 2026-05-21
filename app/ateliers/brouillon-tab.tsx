@@ -5,6 +5,7 @@ import {
   THEMATIQUES,
   type NotesPositionnement,
   type Thematique,
+  type TypeBeneficiaire,
 } from "@/lib/positionnement"
 import type { FicheAtelier } from "@/lib/atelier"
 import {
@@ -48,6 +49,7 @@ interface Session extends FicheAtelier {
 
 interface Beneficiaire {
   id: number
+  type: TypeBeneficiaire
   prenom: string
   nom: string
   dateNaissance: string
@@ -62,6 +64,7 @@ interface Beneficiaire {
   niveau: NiveauBenef
   notes: string
   statut: StatutBenef
+  parentIds: number[]
 }
 
 interface Groupe {

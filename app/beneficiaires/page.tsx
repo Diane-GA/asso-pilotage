@@ -10,6 +10,7 @@ import {
   migrate as migrateBenef,
   type NotesPositionnement,
   type Thematique,
+  type TypeBeneficiaire,
 } from "@/lib/positionnement"
 import SlideOver, { Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
 import { Plus, Pencil, Search, Phone, GraduationCap, Users, X, AlertTriangle } from "lucide-react"
@@ -22,6 +23,7 @@ type StatutBenef = "actif" | "diplômé" | "abandon"
 
 interface Beneficiaire {
   id: number
+  type: TypeBeneficiaire
   prenom: string
   nom: string
   dateNaissance: string
@@ -36,6 +38,9 @@ interface Beneficiaire {
   niveau: NiveauBenef
   notes: string
   statut: StatutBenef
+  /** Pour un élève : ids des parents Beneficiaire (type=parent) qui le rattachent.
+   *  Pour un parent : vide (le lien est porté par la fiche élève). */
+  parentIds: number[]
 }
 
 interface Groupe {
@@ -109,12 +114,14 @@ const statutStyle: Record<StatutBenef, string> = {
 }
 
 const empty = (): Omit<Beneficiaire, "id"> => ({
+  type: "eleve",
   prenom: "", nom: "", dateNaissance: "", email: "", telephone: "",
   nomParent: "", telephoneParent: "", emailParent: "",
   dateInscription: new Date().toISOString().split("T")[0],
   positionnementInitial: emptyNotes(),
   positionnementFinal:   emptyNotes(),
   niveau: "débutant", notes: "", statut: "actif",
+  parentIds: [],
 })
 
 // ──────────────────────────────────────────────

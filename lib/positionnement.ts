@@ -57,21 +57,36 @@ export function moyenne(notes: NotesPositionnement): number | null {
 }
 
 // ──────────────────────────────────────────────
+// Discriminateur eleve / parent (chantier "ateliers adultes")
+// ──────────────────────────────────────────────
+// Un Bénéficiaire est soit un élève (enfant), soit un parent (adulte).
+// Les deux passent le même test de positionnement (mêmes 4 thématiques).
+// L'algorithme de composition reste identique, seule la pool eligible
+// est filtree par l'audience de l'atelier (cf. lib/atelier.ts).
+
+export type TypeBeneficiaire = "eleve" | "parent"
+
+// ──────────────────────────────────────────────
 // Migration depuis l'ancien format (note unique `noteEvaluation`)
 // ──────────────────────────────────────────────
-// Si la donnée vient de l'ancien modèle (avant Lot 1), on recopie la note
-// unique sur les 4 thématiques du test initial. C'est volontairement
-// grossier — la collaboratrice pourra affiner manuellement après migration.
+// Si la donnée vient de l'ancien modèle, on recopie la note unique sur les
+// 4 thématiques du test initial. C'est volontairement grossier — la
+// collaboratrice pourra affiner manuellement après migration.
+// On comble aussi les champs ajoutés ultérieurement (type, parentIds).
 
 interface LegacyBenef {
   noteEvaluation?: number | null
   positionnementInitial?: NotesPositionnement
   positionnementFinal?:   NotesPositionnement
+  type?:      TypeBeneficiaire
+  parentIds?: number[]
 }
 
 export function migrate<T extends LegacyBenef>(b: T): T & {
   positionnementInitial: NotesPositionnement
   positionnementFinal:   NotesPositionnement
+  type:      TypeBeneficiaire
+  parentIds: number[]
 } {
   const initial = b.positionnementInitial ?? (
     b.noteEvaluation != null
@@ -84,5 +99,13 @@ export function migrate<T extends LegacyBenef>(b: T): T & {
       : emptyNotes()
   )
   const final = b.positionnementFinal ?? emptyNotes()
-  return { ...b, positionnementInitial: initial, positionnementFinal: final }
+  return {
+    ...b,
+    positionnementInitial: initial,
+    positionnementFinal:   final,
+    // Par défaut "eleve" pour rétrocompat : toutes les fiches déjà saisies
+    // étaient des enfants. Les parents seront crées explicitement.
+    type:      b.type      ?? "eleve",
+    parentIds: b.parentIds ?? [],
+  }
 }
