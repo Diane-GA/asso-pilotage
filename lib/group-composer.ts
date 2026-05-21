@@ -50,10 +50,22 @@ export interface GroupeBrouillon {
   scoreCohesion: number
 }
 
+/** Poids appliqué à une thématique dans le tri du groupage.
+ *  "principale" passe en tête du tri lexicographique → la note sur cette
+ *  thématique a le plus de poids dans le placement. */
+export type Pondaration = "principale" | "secondaire"
+
 export interface ParametresComposition {
   mode: "homogène" | "hétérogène"
   tailleGroupeCible: number
   competencesCiblees: Thematique[]
+  /** Pondération par thématique. Manquante = "secondaire". */
+  ponderation?: Partial<Record<Thematique, Pondaration>>
+  /** Seuil bas de la note moyenne pour ne pas placer dans un groupe.
+   *  Les bénéficiaires en dessous vont dans le bucket "outliers". */
+  noteMin?: number | null
+  /** Seuil haut symétrique au précédent. */
+  noteMax?: number | null
   erreurs: string[]
 }
 
@@ -69,7 +81,16 @@ export interface Brouillon {
   horsTranche: number[]
   /** Bénéficiaires non placés : statut non actif. */
   exclusStatut: number[]
+  /** Bénéficiaires non placés : moyenne hors des seuils noteMin/noteMax.
+   *  À traiter à part (groupe adapté, suivi personnalisé). */
+  outliers: number[]
   parametres: ParametresComposition
+}
+
+export interface OptionsComposition {
+  ponderation?: Partial<Record<Thematique, Pondaration>>
+  noteMin?: number | null
+  noteMax?: number | null
 }
 
 // ──────────────────────────────────────────────
@@ -143,6 +164,33 @@ function repartirRoundRobin<T>(items: T[], nGroupes: number): T[][] {
   return result
 }
 
+/** Réordonne les thématiques cochées selon leur pondération.
+ *  Les "principales" passent en tête → priorité dans le tri lexicographique. */
+function ordonnerParPoids(
+  dims: Thematique[],
+  ponderation?: Partial<Record<Thematique, Pondaration>>,
+): Thematique[] {
+  if (!ponderation) return dims
+  return [...dims].sort((a, b) => {
+    const pa = ponderation[a] === "principale" ? 0 : 1
+    const pb = ponderation[b] === "principale" ? 0 : 1
+    return pa - pb
+  })
+}
+
+/** Moyenne d'un bénéficiaire sur les thématiques ciblées (uniquement
+ *  pour détecter les outliers — pas pour le groupage). */
+function moyenneSur(
+  b: BeneficiairePourGroupage,
+  dims: Thematique[],
+): number | null {
+  const notes = dims
+    .map(d => b.positionnementInitial[d])
+    .filter((n): n is number => n !== null)
+  if (notes.length === 0) return null
+  return notes.reduce((a, b) => a + b, 0) / notes.length
+}
+
 // ──────────────────────────────────────────────
 // API publique
 // ──────────────────────────────────────────────
@@ -153,9 +201,15 @@ export function composerGroupes(
     "competencesCiblees" | "ageMin" | "ageMax" | "tailleGroupeCible" | "ratioEncadrement" | "mixerNiveaux"
   > & { id: number; titre: string },
   beneficiaires: BeneficiairePourGroupage[],
+  options: OptionsComposition = {},
 ): Brouillon {
-  const dims = atelier.competencesCiblees
+  // Ordonner les thématiques cochées selon le poids (principales d'abord).
+  // Cet ordre détermine la priorité du tri lexicographique : la note sur la
+  // thématique principale a le plus de poids dans le placement.
+  const dims = ordonnerParPoids(atelier.competencesCiblees, options.ponderation)
   const taille = atelier.tailleGroupeCible ?? 10
+  const noteMin = options.noteMin ?? null
+  const noteMax = options.noteMax ?? null
   const erreurs: string[] = []
 
   // ── 1. Validation des paramètres ──
@@ -168,10 +222,14 @@ export function composerGroupes(
     erreurs.push("La taille de groupe cible doit être au moins 2.")
   }
 
-  // ── 2. Tri des bénéficiaires en buckets (actifs / à évaluer / hors tranche / exclus) ──
+  // ── 2. Tri des bénéficiaires en buckets ──
+  // Ordre des filtres : statut → âge → notes manquantes → outliers (note hors
+  // seuil) → éligibles. Chaque cas est rendu visible côté UI, rien n'est
+  // perdu silencieusement.
   const exclusStatut: number[] = []
   const horsTranche:  number[] = []
   const aEvaluer:     number[] = []
+  const outliers:     number[] = []
   const eligibles:    BeneficiairePourGroupage[] = []
 
   for (const b of beneficiaires) {
@@ -192,6 +250,18 @@ export function composerGroupes(
       aEvaluer.push(b.id)
       continue
     }
+    // Filtre outliers : si un seuil bas/haut est défini, on calcule la moyenne
+    // du bénéficiaire sur les thématiques ciblées et on l'écarte du groupage
+    // s'il dépasse les bornes. La moyenne ne sert qu'à ce filtre, pas au tri.
+    if (noteMin !== null || noteMax !== null) {
+      const moy = moyenneSur(b, dims)
+      if (moy !== null) {
+        if ((noteMin !== null && moy < noteMin) || (noteMax !== null && moy > noteMax)) {
+          outliers.push(b.id)
+          continue
+        }
+      }
+    }
     eligibles.push(b)
   }
 
@@ -204,10 +274,13 @@ export function composerGroupes(
       aEvaluer,
       horsTranche,
       exclusStatut,
+      outliers,
       parametres: {
         mode: atelier.mixerNiveaux ? "hétérogène" : "homogène",
         tailleGroupeCible: taille,
         competencesCiblees: dims,
+        ponderation: options.ponderation,
+        noteMin, noteMax,
         erreurs,
       },
     }
@@ -265,10 +338,13 @@ export function composerGroupes(
     aEvaluer,
     horsTranche,
     exclusStatut,
+    outliers,
     parametres: {
       mode: atelier.mixerNiveaux ? "hétérogène" : "homogène",
       tailleGroupeCible: taille,
       competencesCiblees: dims,
+      ponderation: options.ponderation,
+      noteMin, noteMax,
       erreurs,
     },
   }

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import {
   THEMATIQUES,
   type NotesPositionnement,
+  type Thematique,
 } from "@/lib/positionnement"
 import type { FicheAtelier } from "@/lib/atelier"
 import {
@@ -14,11 +15,13 @@ import {
   type Brouillon,
   type GroupeBrouillon,
   type BeneficiairePourGroupage,
+  type OptionsComposition,
+  type Pondaration,
 } from "@/lib/group-composer"
 import SlideOver, { Field, Input, SaveButton } from "@/components/SlideOver"
 import {
   Shuffle, RotateCcw, CheckCircle2, AlertTriangle, Users,
-  GraduationCap, UserCheck, Sparkles, Settings,
+  GraduationCap, UserCheck, Sparkles, Settings, Pencil, X, Plus,
 } from "lucide-react"
 
 // ──────────────────────────────────────────────
@@ -107,11 +110,24 @@ export default function BrouillonGroupesTab(props: {
   /** Brouillons indexés par atelierId. */
   const [brouillons, setBrouillons] = useState<Record<number, Brouillon | null>>({})
 
+  /** Groupe en cours de modification manuelle (id local du GroupeBrouillon). */
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+
   // SlideOver "régénérer avec paramètres"
+  interface ParamForm {
+    tailleGroupeCible: number
+    mixerNiveaux: boolean
+    /** Pondération par thématique cochée sur l'atelier. */
+    ponderation: Partial<Record<Thematique, Pondaration>>
+    /** Seuils pour le filtre outliers. Vides = pas de filtre. */
+    noteMin: string
+    noteMax: string
+  }
   const [paramSlide, setParamSlide] = useState(false)
   const [paramAtelier, setParamAtelier] = useState<Session | null>(null)
-  const [paramForm, setParamForm] = useState<{ tailleGroupeCible: number; mixerNiveaux: boolean }>({
+  const [paramForm, setParamForm] = useState<ParamForm>({
     tailleGroupeCible: 10, mixerNiveaux: false,
+    ponderation: {}, noteMin: "", noteMax: "",
   })
 
   // Drag & drop
@@ -127,26 +143,96 @@ export default function BrouillonGroupesTab(props: {
   }, [sessions])
 
   // ── Actions ──
-  function genererPour(atelier: Session, override?: Partial<FicheAtelier>) {
+  function genererPour(
+    atelier: Session,
+    override?: Partial<FicheAtelier>,
+    options?: OptionsComposition,
+  ) {
     const fiche = { ...atelier, ...override }
-    const brouillon = composerGroupes(fiche, beneficiaires.map(toGroupingInput))
+    const brouillon = composerGroupes(fiche, beneficiaires.map(toGroupingInput), options)
     saveBrouillon(brouillon)
     setBrouillons(m => ({ ...m, [atelier.id]: brouillon }))
   }
 
   function ouvrirParametres(atelier: Session) {
     setParamAtelier(atelier)
+    // Pré-remplit avec les paramètres du brouillon courant si présent,
+    // sinon avec les valeurs déclarées sur la fiche atelier.
+    const courant = brouillons[atelier.id]
     setParamForm({
-      tailleGroupeCible: atelier.tailleGroupeCible ?? 10,
-      mixerNiveaux: atelier.mixerNiveaux,
+      tailleGroupeCible: courant?.parametres.tailleGroupeCible ?? atelier.tailleGroupeCible ?? 10,
+      mixerNiveaux:      courant?.parametres.mode === "hétérogène" ? true : atelier.mixerNiveaux,
+      ponderation:       courant?.parametres.ponderation ?? {},
+      noteMin:           courant?.parametres.noteMin != null ? String(courant.parametres.noteMin) : "",
+      noteMax:           courant?.parametres.noteMax != null ? String(courant.parametres.noteMax) : "",
     })
     setParamSlide(true)
   }
 
   function validerParametres() {
     if (!paramAtelier) return
-    genererPour(paramAtelier, paramForm)
+    const noteMin = paramForm.noteMin === "" ? null : Number(paramForm.noteMin)
+    const noteMax = paramForm.noteMax === "" ? null : Number(paramForm.noteMax)
+    genererPour(
+      paramAtelier,
+      {
+        tailleGroupeCible: paramForm.tailleGroupeCible,
+        mixerNiveaux:      paramForm.mixerNiveaux,
+      },
+      {
+        ponderation: paramForm.ponderation,
+        noteMin, noteMax,
+      },
+    )
     setParamSlide(false)
+  }
+
+  // ── Modification manuelle ──
+  function toggleEdit(groupeId: string) {
+    // Re-clic sur le même groupe → quitter le mode édition. Sinon basculer
+    // sur le groupe demandé (au plus un groupe en édition à la fois pour
+    // garder l'UI lisible).
+    setEditingGroupId(prev => prev === groupeId ? null : groupeId)
+  }
+
+  function removeMember(atelierId: number, groupeId: string, benefId: number) {
+    const b = brouillons[atelierId]
+    if (!b) return
+    const newGroupes = b.groupes.map(g =>
+      g.id === groupeId
+        ? { ...g, beneficiaireIds: g.beneficiaireIds.filter(id => id !== benefId) }
+        : g,
+    )
+    const updated: Brouillon = { ...b, groupes: newGroupes }
+    saveBrouillon(updated)
+    setBrouillons(m => ({ ...m, [atelierId]: updated }))
+  }
+
+  function addMember(atelierId: number, groupeId: string, benefId: number) {
+    const b = brouillons[atelierId]
+    if (!b) return
+    const newGroupes = b.groupes.map(g =>
+      g.id === groupeId
+        ? (g.beneficiaireIds.includes(benefId)
+            ? g
+            : { ...g, beneficiaireIds: [...g.beneficiaireIds, benefId] })
+        : g,
+    )
+    const updated: Brouillon = { ...b, groupes: newGroupes }
+    saveBrouillon(updated)
+    setBrouillons(m => ({ ...m, [atelierId]: updated }))
+  }
+
+  /** Renvoie les bénéficiaires actuellement non placés dans un groupe du brouillon
+   *  (mais éligibles à l'atelier — la pool des "libres" pour le bouton +Ajouter). */
+  function getBenefsLibres(brouillon: Brouillon): Beneficiaire[] {
+    const placed = new Set(brouillon.groupes.flatMap(g => g.beneficiaireIds))
+    // Les bénéficiaires actifs non placés dans un groupe.
+    // On laisse la collaboratrice juger : elle peut vouloir ajouter manuellement
+    // un bénéficiaire "à évaluer", "outlier" ou "hors tranche" malgré le filtre.
+    return beneficiaires
+      .filter(b => b.statut === "actif" && !placed.has(b.id))
+      .sort((a, b) => a.prenom.localeCompare(b.prenom))
   }
 
   function supprimerBrouillon(atelierId: number) {
@@ -318,13 +404,18 @@ export default function BrouillonGroupesTab(props: {
                       benefById={benefById}
                       onDragStart={onDragStart}
                       onDrop={onDropOnGroupe}
+                      editing={editingGroupId === g.id}
+                      onToggleEdit={() => toggleEdit(g.id)}
+                      onRemoveMember={benefId => removeMember(atelier.id, g.id, benefId)}
+                      onAddMember={benefId => addMember(atelier.id, g.id, benefId)}
+                      benefsLibres={getBenefsLibres(brouillon)}
                     />
                   ))}
                 </div>
               )}
 
               {/* Buckets — bénéficiaires non placés */}
-              {brouillon && (brouillon.aEvaluer.length + brouillon.horsTranche.length > 0) && (
+              {brouillon && (brouillon.aEvaluer.length + brouillon.horsTranche.length + brouillon.outliers.length > 0) && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {brouillon.aEvaluer.length > 0 && (
                     <BucketCard
@@ -342,6 +433,22 @@ export default function BrouillonGroupesTab(props: {
                       titre={`Hors tranche d'âge (${brouillon.horsTranche.length})`}
                       sousTitre={`Cible : ${atelier.ageMin}-${atelier.ageMax} ans`}
                       membres={brouillon.horsTranche.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
+                    />
+                  )}
+                  {brouillon.outliers.length > 0 && (
+                    <BucketCard
+                      color="red"
+                      icon={<AlertTriangle size={11} />}
+                      titre={`Outliers (${brouillon.outliers.length})`}
+                      sousTitre={(() => {
+                        const min = brouillon.parametres.noteMin
+                        const max = brouillon.parametres.noteMax
+                        if (min != null && max != null) return `Moyenne hors de [${min}, ${max}]`
+                        if (min != null) return `Moyenne < ${min}`
+                        if (max != null) return `Moyenne > ${max}`
+                        return "Hors des seuils définis"
+                      })()}
+                      membres={brouillon.outliers.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
                     />
                   )}
                 </div>
@@ -375,6 +482,8 @@ export default function BrouillonGroupesTab(props: {
             Modifie les paramètres ci-dessous pour relancer l&apos;algorithme.
             Le brouillon actuel sera remplacé.
           </p>
+
+          {/* ── Taille de groupe + mode ── */}
           <Field label="Taille de groupe cible">
             <Input
               type="number" min={2} max={30}
@@ -393,6 +502,80 @@ export default function BrouillonGroupesTab(props: {
               Mélanger les niveaux <span className="text-muted text-xs">(hétérogène)</span>
             </span>
           </label>
+
+          {/* ── Pondération des thématiques ── */}
+          {paramAtelier && paramAtelier.competencesCiblees.length >= 2 && (
+            <div className="rounded-xl border border-border bg-surface/50 p-3">
+              <p className="text-xs font-semibold text-foreground uppercase tracking-wider mb-1">
+                Pondération des compétences
+              </p>
+              <p className="text-[11px] text-muted mb-3">
+                Marque la compétence <b>principale</b> pour qu&apos;elle pèse le plus dans le placement.
+                Les autres deviennent secondaires.
+              </p>
+              <div className="flex flex-col gap-2">
+                {paramAtelier.competencesCiblees.map(c => {
+                  const t = THEMATIQUES.find(x => x.key === c)
+                  if (!t) return null
+                  const current = paramForm.ponderation[c] ?? "secondaire"
+                  return (
+                    <div key={c} className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-foreground flex-1 min-w-0">{t.label}</span>
+                      <div className="flex gap-1">
+                        {(["principale", "secondaire"] as const).map(p => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setParamForm(f => ({
+                              ...f, ponderation: { ...f.ponderation, [c]: p },
+                            }))}
+                            className={`text-[10px] px-2.5 py-1 rounded-full font-medium transition-colors ${
+                              current === p
+                                ? p === "principale"
+                                  ? "bg-ateliers text-white"
+                                  : "bg-slate-200 text-slate-700"
+                                : "bg-surface text-muted border border-border hover:border-ateliers"
+                            }`}
+                          >
+                            {p === "principale" ? "Principale" : "Secondaire"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Outliers ── */}
+          <div className="rounded-xl border border-border bg-surface/50 p-3">
+            <p className="text-xs font-semibold text-foreground uppercase tracking-wider mb-1">
+              Filtrer les outliers
+            </p>
+            <p className="text-[11px] text-muted mb-3">
+              Les bénéficiaires dont la <b>moyenne</b> sur les compétences ciblées est en dehors
+              de l&apos;intervalle ci-dessous ne sont pas placés automatiquement — ils sont
+              isolés dans un bucket à part pour décision pédagogique. Laisse vide pour ne pas filtrer.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Note minimum (sur 20)">
+                <Input
+                  type="number" min={0} max={20} placeholder="—"
+                  value={paramForm.noteMin}
+                  onChange={e => setParamForm(f => ({ ...f, noteMin: e.target.value }))}
+                />
+              </Field>
+              <Field label="Note maximum (sur 20)">
+                <Input
+                  type="number" min={0} max={20} placeholder="—"
+                  value={paramForm.noteMax}
+                  onChange={e => setParamForm(f => ({ ...f, noteMax: e.target.value }))}
+                />
+              </Field>
+            </div>
+          </div>
+
           <p className="text-[11px] text-muted bg-slate-50 rounded-lg px-3 py-2">
             💡 <b>Mode homogène</b> : les bénéficiaires aux notes proches sont regroupés (rythme pédagogique adapté).<br />
             <b>Mode hétérogène</b> : les niveaux sont mélangés (entraide entre pairs).
@@ -415,16 +598,32 @@ function GroupeCard(props: {
   benefById: (id: number) => Beneficiaire | undefined
   onDragStart: (benefId: number, fromGroupeId: string, atelierId: number) => void
   onDrop: (toGroupeId: string, atelierId: number) => void
+  /** Mode édition manuelle : croix sur chaque membre + bouton "+ Ajouter". */
+  editing: boolean
+  onToggleEdit: () => void
+  onRemoveMember: (benefId: number) => void
+  onAddMember: (benefId: number) => void
+  benefsLibres: Beneficiaire[]
 }) {
-  const { groupe, atelierId, dims, benefById, onDragStart, onDrop } = props
+  const {
+    groupe, atelierId, dims, benefById, onDragStart, onDrop,
+    editing, onToggleEdit, onRemoveMember, onAddMember, benefsLibres,
+  } = props
   const [over, setOver] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
 
   return (
     <div
       onDragOver={e => { e.preventDefault(); setOver(true) }}
       onDragLeave={() => setOver(false)}
       onDrop={e => { e.preventDefault(); setOver(false); onDrop(groupe.id, atelierId) }}
-      className={`rounded-xl border bg-surface transition-colors ${over ? "border-ateliers ring-2 ring-ateliers/20" : "border-border"}`}
+      className={`rounded-xl border bg-surface transition-colors ${
+        editing
+          ? "border-ateliers ring-2 ring-ateliers/20"
+          : over
+            ? "border-ateliers ring-2 ring-ateliers/20"
+            : "border-border"
+      }`}
     >
       <header className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 flex-wrap">
         <div className="min-w-0">
@@ -440,11 +639,24 @@ function GroupeCard(props: {
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${cohesionColor(groupe.scoreCohesion)}`}>
             cohésion {groupe.scoreCohesion}%
           </span>
+          <button
+            type="button"
+            onClick={onToggleEdit}
+            title={editing ? "Terminer l'édition" : "Modifier la composition"}
+            className={`p-1 rounded transition-colors ${
+              editing ? "bg-ateliers text-white" : "text-muted hover:bg-slate-100 hover:text-foreground"
+            }`}
+          >
+            {editing ? <CheckCircle2 size={11} /> : <Pencil size={11} />}
+          </button>
         </div>
       </header>
+
       <ul className="px-2 py-2 flex flex-col gap-1 min-h-[60px]">
         {groupe.beneficiaireIds.length === 0 && (
-          <li className="text-[11px] text-muted italic text-center py-3">Glisse un bénéficiaire ici</li>
+          <li className="text-[11px] text-muted italic text-center py-3">
+            {editing ? "Aucun membre — utilise le bouton + ci-dessous." : "Glisse un bénéficiaire ici"}
+          </li>
         )}
         {groupe.beneficiaireIds.map(id => {
           const b = benefById(id)
@@ -453,14 +665,16 @@ function GroupeCard(props: {
           return (
             <li
               key={b.id}
-              draggable
+              draggable={!editing}
               onDragStart={() => onDragStart(b.id, groupe.id, atelierId)}
-              className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-50 cursor-grab active:cursor-grabbing"
+              className={`flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-50 ${
+                editing ? "" : "cursor-grab active:cursor-grabbing"
+              }`}
             >
               <GraduationCap size={12} className="text-ateliers-dark shrink-0" />
               <span className="text-xs font-medium text-foreground">{b.prenom} {b.nom}</span>
               {age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
-              <span className="ml-auto flex gap-1">
+              <span className="ml-auto flex items-center gap-1">
                 {dims.map(d => {
                   const n = b.positionnementInitial[d]
                   return (
@@ -469,26 +683,89 @@ function GroupeCard(props: {
                     </span>
                   )
                 })}
+                {editing && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveMember(b.id)}
+                    title={`Retirer ${b.prenom} ${b.nom} du groupe`}
+                    className="ml-1 p-1 rounded text-red-600 hover:bg-red-50"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
               </span>
             </li>
           )
         })}
       </ul>
+
+      {/* Bouton +Ajouter + popover en mode édition */}
+      {editing && (
+        <div className="px-2 pb-2 border-t border-border/50 pt-2 relative">
+          <button
+            type="button"
+            onClick={() => setAddOpen(o => !o)}
+            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-ateliers-dark hover:bg-ateliers-light/50 rounded-md py-1.5"
+          >
+            <Plus size={11} /> Ajouter un élève {addOpen && <span className="text-muted">(referme)</span>}
+          </button>
+          {addOpen && (
+            <div className="absolute left-2 right-2 top-full mt-1 z-10 bg-surface border border-border rounded-xl shadow-lg max-h-64 overflow-y-auto">
+              {benefsLibres.length === 0 ? (
+                <p className="text-[11px] text-muted italic text-center py-4">
+                  Aucun bénéficiaire libre à ajouter.
+                </p>
+              ) : (
+                <ul className="py-1">
+                  {benefsLibres.map(b => {
+                    const age = computeAge(b.dateNaissance)
+                    return (
+                      <li key={b.id}>
+                        <button
+                          type="button"
+                          onClick={() => { onAddMember(b.id); setAddOpen(false) }}
+                          className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50"
+                        >
+                          <GraduationCap size={11} className="text-muted shrink-0" />
+                          <span className="font-medium text-foreground">{b.prenom} {b.nom}</span>
+                          {age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
+                          <span className="ml-auto flex gap-1">
+                            {dims.map(d => {
+                              const n = b.positionnementInitial[d]
+                              return (
+                                <span key={d} className="text-[10px] text-muted tabular-nums">
+                                  {n ?? "—"}
+                                </span>
+                              )
+                            })}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 function BucketCard(props: {
-  color: "amber" | "slate"
+  color: "amber" | "slate" | "red"
   icon: React.ReactNode
   titre: string
   sousTitre: string
   membres: Beneficiaire[]
 }) {
   const { color, icon, titre, sousTitre, membres } = props
-  const palette = color === "amber"
-    ? "bg-amber-50 border-amber-200 text-amber-800"
-    : "bg-slate-50 border-slate-200 text-slate-700"
+  const palette = {
+    amber: "bg-amber-50 border-amber-200 text-amber-800",
+    slate: "bg-slate-50 border-slate-200 text-slate-700",
+    red:   "bg-red-50 border-red-200 text-red-800",
+  }[color]
   return (
     <div className={`rounded-xl border p-3 ${palette}`}>
       <p className="text-xs font-semibold flex items-center gap-1.5 mb-0.5">{icon} {titre}</p>
