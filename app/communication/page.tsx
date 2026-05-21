@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react"
+import Link from "next/link"
 import { benevoles as benevolesMock } from "@/lib/mock-data"
 import { Calendar, Columns3, Check, X, RotateCcw, Plus, Shuffle, CheckCircle2, XCircle, Users, ChevronRight } from "lucide-react"
 import SlideOver, { Field, Input, Textarea, Select, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
@@ -260,12 +261,15 @@ function KanbanTab({ posts, rejectedIds = [], onChangeStatus, onEdit }: {
       </p>
       <div className="grid grid-cols-4 gap-4">
         {KANBAN_COLS.map((col) => {
-          const colPosts = posts.filter((p) => p.statut === col.id)
+          const allColPosts = posts.filter((p) => p.statut === col.id)
+          const colPosts = col.id === "publié"
+            ? [...allColPosts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3)
+            : allColPosts
           return (
             <div key={col.id} className={`rounded-xl border-2 p-3 flex flex-col gap-3 min-h-48 ${col.color}`}>
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-foreground leading-tight">{col.label}</h3>
-                <span className="text-xs bg-white/70 rounded-full px-2 py-0.5 font-medium text-muted">{colPosts.length}</span>
+                <span className="text-xs bg-white/70 rounded-full px-2 py-0.5 font-medium text-muted">{allColPosts.length}</span>
               </div>
               {colPosts.map((p) => (
                 <div
@@ -312,6 +316,15 @@ function KanbanTab({ posts, rejectedIds = [], onChangeStatus, onEdit }: {
               ))}
               {colPosts.length === 0 && (
                 <div className="flex-1 flex items-center justify-center text-xs text-muted/50 italic">Vide</div>
+              )}
+              {col.id === "publié" && (
+                <Link
+                  href="/communication/publies"
+                  onClick={e => e.stopPropagation()}
+                  className="flex items-center justify-center gap-1 text-[10px] font-medium text-emerald-700 hover:text-emerald-800 bg-white/70 hover:bg-white rounded-lg py-2 transition-colors border border-emerald-200/60"
+                >
+                  Voir tous les posts publiés <ChevronRight size={10} />
+                </Link>
               )}
             </div>
           )
