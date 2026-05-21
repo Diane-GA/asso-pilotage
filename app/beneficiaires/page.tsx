@@ -227,10 +227,10 @@ export default function BeneficiairesPage() {
         </div>
       </div>
 
-      {/* Search + filters */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
+      {/* Search + filters (pattern unifié) */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
         <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
             type="text"
             placeholder="Rechercher par nom, prénom, parent…"
@@ -239,7 +239,7 @@ export default function BeneficiairesPage() {
             className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-ateliers/30"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground">
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground" aria-label="Effacer la recherche">
               <X size={13} />
             </button>
           )}
@@ -264,6 +264,19 @@ export default function BeneficiairesPage() {
             </button>
           ))}
         </div>
+
+        {(search !== "" || filterStatut !== "tous" || filterNiveau !== "tous") && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-muted">{filtered.length} résultat{filtered.length > 1 ? "s" : ""}</span>
+            <button
+              type="button"
+              onClick={() => { setSearch(""); setFilterStatut("tous"); setFilterNiveau("tous") }}
+              className="text-xs text-muted hover:text-foreground hover:underline"
+            >
+              Réinitialiser
+            </button>
+          </div>
+        )}
       </div>
 
       {/* List */}

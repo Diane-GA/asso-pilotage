@@ -460,13 +460,18 @@ function AteliersTab({
           <option value="moisProchain">Mois prochain</option>
         </select>
         {filtreActif && (
-          <button
-            type="button"
-            onClick={resetFiltres}
-            className="text-xs text-muted hover:text-foreground hover:underline"
-          >
-            Réinitialiser
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-muted">
+              {upcoming.length + past.length} résultat{upcoming.length + past.length > 1 ? "s" : ""}
+            </span>
+            <button
+              type="button"
+              onClick={resetFiltres}
+              className="text-xs text-muted hover:text-foreground hover:underline"
+            >
+              Réinitialiser
+            </button>
+          </div>
         )}
       </div>
 
@@ -513,11 +518,10 @@ function GroupesTab({
   sessions: Session[]
   onEdit: (g: Groupe) => void
 }) {
-  // ── Filtres ──
+  // ── Filtres (tous en barre haute pour cohérence cross-pages) ──
   const [search, setSearch]               = useState("")
   const [filterAtelier, setFilterAtelier] = useState<string>("tous")
-  // Filtre par nom de groupe — saisi dans l'en-tete de la colonne "Groupe".
-  const [filterGroupe, setFilterGroupe]   = useState<string>("")
+  const [filterType, setFilterType]       = useState<TypeGroupe | "tous">("tous")
 
   // ── Tri ──
   type SortKey = "atelier" | "groupe" | "effectif"
@@ -549,17 +553,13 @@ function GroupesTab({
 
   // ── Filtrage ──
   const q = search.trim().toLowerCase()
-  const fg = filterGroupe.trim().toLowerCase()
   const filtered = groupes.filter(g => {
     if (filterAtelier === "sans") {
       if (g.atelierId !== null) return false
     } else if (filterAtelier !== "tous") {
       if (String(g.atelierId) !== filterAtelier) return false
     }
-    // Filtre saisi directement dans la colonne "Groupe" (nom + type matchent).
-    if (fg && !g.nom.toLowerCase().includes(fg) && !g.type.toLowerCase().includes(fg)) {
-      return false
-    }
+    if (filterType !== "tous" && g.type !== filterType) return false
     if (!q) return true
     if (g.nom.toLowerCase().includes(q)) return true
     if (getAtelierTitre(g.atelierId).toLowerCase().includes(q)) return true
@@ -582,11 +582,11 @@ function GroupesTab({
     return 0
   })
 
-  const filtreActif = q !== "" || filterAtelier !== "tous" || filterGroupe !== ""
+  const filtreActif = q !== "" || filterAtelier !== "tous" || filterType !== "tous"
   function resetFiltres() {
     setSearch("")
     setFilterAtelier("tous")
-    setFilterGroupe("")
+    setFilterType("tous")
   }
 
   // Sous-composant : en-tête de colonne triable
@@ -608,7 +608,7 @@ function GroupesTab({
 
   return (
     <div className="space-y-4">
-      {/* ── Filtres ── */}
+      {/* ── Filtres (barre haute unifiée) ── */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -636,10 +636,27 @@ function GroupesTab({
           ))}
           {aGroupesManuels && <option value="sans">— Groupes manuels —</option>}
         </select>
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+          {(["tous", "niveau", "mixte", "âge"] as const).map(t => (
+            <button
+              type="button"
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                filterType === t ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"
+              }`}
+            >
+              {t === "tous" ? "Tous types" : t}
+            </button>
+          ))}
+        </div>
         {filtreActif && (
-          <button type="button" onClick={resetFiltres} className="text-xs text-muted hover:text-foreground hover:underline">
-            Réinitialiser
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-muted">{filtered.length} résultat{filtered.length > 1 ? "s" : ""}</span>
+            <button type="button" onClick={resetFiltres} className="text-xs text-muted hover:text-foreground hover:underline">
+              Réinitialiser
+            </button>
+          </div>
         )}
       </div>
 
@@ -662,34 +679,6 @@ function GroupesTab({
                   Aperçu des membres
                 </th>
                 <th className="w-10 px-2" aria-label="Actions" />
-              </tr>
-              {/* 2e ligne d'en-tête : filtres par colonne (uniquement Groupe pour l'instant) */}
-              <tr className="border-b border-border bg-surface">
-                <th className="px-4 py-1.5" />
-                <th className="px-4 py-1.5">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Filtrer par nom ou type…"
-                      value={filterGroupe}
-                      onChange={e => setFilterGroupe(e.target.value)}
-                      className="w-full text-xs px-2 py-1 rounded-md border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-ateliers/30"
-                    />
-                    {filterGroupe && (
-                      <button
-                        type="button"
-                        onClick={() => setFilterGroupe("")}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
-                        aria-label="Effacer le filtre"
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-1.5" />
-                <th className="px-4 py-1.5" />
-                <th className="px-2 py-1.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
