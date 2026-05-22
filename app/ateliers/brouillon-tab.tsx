@@ -390,7 +390,9 @@ export default function BrouillonGroupesTab(props: {
                     className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
                       pasDeCompetence
                         ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                        : "bg-amber-500 text-white hover:bg-amber-600"
+                        : atelier.audience === "parents"
+                          ? "bg-communication text-white hover:bg-communication-dark"
+                          : "bg-ateliers text-white hover:bg-ateliers-dark"
                     }`}
                   >
                     <Sparkles size={12} /> Générer un brouillon
@@ -424,6 +426,7 @@ export default function BrouillonGroupesTab(props: {
                       key={g.id}
                       groupe={g}
                       atelierId={atelier.id}
+                      audience={atelier.audience}
                       dims={atelier.competencesCiblees}
                       benefById={benefById}
                       onDragStart={onDragStart}
@@ -436,8 +439,10 @@ export default function BrouillonGroupesTab(props: {
                 </div>
               )}
 
-              {/* Buckets — bénéficiaires non placés */}
-              {brouillon && (brouillon.aEvaluer.length + brouillon.horsTranche.length + brouillon.outliers.length > 0) && (
+              {/* Buckets — bénéficiaires non placés.
+                  Le bucket "hors tranche" ne fait pas sens pour les adultes
+                  (pas de notion d'âge pour les ateliers parents). */}
+              {brouillon && (brouillon.aEvaluer.length + (atelier.audience === "parents" ? 0 : brouillon.horsTranche.length) + brouillon.outliers.length > 0) && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {brouillon.aEvaluer.length > 0 && (
                     <BucketCard
@@ -448,7 +453,7 @@ export default function BrouillonGroupesTab(props: {
                       membres={brouillon.aEvaluer.map(id => benefById(id)).filter((b): b is Beneficiaire => !!b)}
                     />
                   )}
-                  {brouillon.horsTranche.length > 0 && (
+                  {atelier.audience !== "parents" && brouillon.horsTranche.length > 0 && (
                     <BucketCard
                       color="slate"
                       icon={<Users size={11} />}
@@ -621,6 +626,9 @@ export default function BrouillonGroupesTab(props: {
 function GroupeCard(props: {
   groupe: GroupeBrouillon
   atelierId: number
+  /** Audience de l'atelier — pilote l'iconographie et le wording (élève vs parent)
+   *  ainsi que l'affichage de l'âge (caché pour les parents). */
+  audience: FicheAtelier["audience"]
   dims: typeof THEMATIQUES[number]["key"][]
   benefById: (id: number) => Beneficiaire | undefined
   onDragStart: (benefId: number, fromGroupeId: string, atelierId: number) => void
@@ -633,11 +641,17 @@ function GroupeCard(props: {
   benefsLibres: Beneficiaire[]
 }) {
   const {
-    groupe, atelierId, dims, benefById, onDragStart, onDrop,
+    groupe, atelierId, audience, dims, benefById, onDragStart, onDrop,
     onRemoveMember, onAddMember, benefsLibres,
   } = props
   const [over, setOver] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const isParents       = audience === "parents"
+  const benefIcon       = isParents ? UserCheck : GraduationCap
+  const benefIconColor  = isParents ? "text-communication-dark" : "text-ateliers-dark"
+  const benefIconColorMuted = isParents ? "text-communication-dark/60" : "text-muted"
+  const addLabel        = isParents ? "Ajouter un parent" : "Ajouter un élève"
+  const Icon            = benefIcon
 
   return (
     <div
@@ -679,9 +693,9 @@ function GroupeCard(props: {
               onDragStart={() => onDragStart(b.id, groupe.id, atelierId)}
               className="group/member flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-50 cursor-grab active:cursor-grabbing"
             >
-              <GraduationCap size={12} className="text-ateliers-dark shrink-0" />
+              <Icon size={12} className={`${benefIconColor} shrink-0`} />
               <span className="text-xs font-medium text-foreground">{b.prenom} {b.nom}</span>
-              {age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
+              {!isParents && age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
               <span className="ml-auto flex items-center gap-1">
                 {dims.map(d => {
                   const n = b.positionnementInitial[d]
@@ -715,9 +729,13 @@ function GroupeCard(props: {
         <button
           type="button"
           onClick={() => setAddOpen(o => !o)}
-          className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-ateliers-dark hover:bg-ateliers-light/50 rounded-md py-1.5"
+          className={`w-full flex items-center justify-center gap-1.5 text-[11px] font-medium rounded-md py-1.5 ${
+            isParents
+              ? "text-communication-dark hover:bg-communication-light/50"
+              : "text-ateliers-dark hover:bg-ateliers-light/50"
+          }`}
         >
-          <Plus size={11} /> Ajouter un élève
+          <Plus size={11} /> {addLabel}
         </button>
         {addOpen && (
           <div className="absolute left-2 right-2 top-full mt-1 z-10 bg-surface border border-border rounded-xl shadow-lg max-h-64 overflow-y-auto">
@@ -749,9 +767,9 @@ function GroupeCard(props: {
                         onClick={() => { onAddMember(b.id); setAddOpen(false) }}
                         className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50"
                       >
-                        <GraduationCap size={11} className="text-muted shrink-0" />
+                        <Icon size={11} className={`${benefIconColorMuted} shrink-0`} />
                         <span className="font-medium text-foreground">{b.prenom} {b.nom}</span>
-                        {age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
+                        {!isParents && age !== null && <span className="text-[10px] text-muted">{age} ans</span>}
                         <span className="ml-auto flex gap-1">
                           {dims.map(d => {
                             const n = b.positionnementInitial[d]

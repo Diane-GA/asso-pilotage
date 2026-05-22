@@ -41,10 +41,28 @@ export function trancheFor(age: number | null): TrancheAge | null {
  *  rétrocompatibilité — les anciens ateliers étaient tous pour les élèves. */
 export type AudienceAtelier = "eleves" | "parents"
 
+/** Couleur visuelle assignée à l'atelier — sert à colorer les blocs de la
+ *  vue Groupes et les avatars membres. Palette fixe pour garantir la
+ *  cohérence (accessibilité : couleur jamais seule, toujours + texte + icône). */
+export type CouleurAtelier =
+  | "teal" | "emerald" | "amber" | "orange" | "violet" | "slate"
+
+export const COULEURS_ATELIER: { key: CouleurAtelier; label: string }[] = [
+  { key: "teal",    label: "Turquoise" },
+  { key: "emerald", label: "Vert" },
+  { key: "amber",   label: "Doré" },
+  { key: "orange",  label: "Orange" },
+  { key: "violet",  label: "Violet" },
+  { key: "slate",   label: "Gris" },
+]
+
 export interface FicheAtelier {
   /** Public visé : determine la pool de bénéficiaires utilisée par l'algo
    *  de composition. */
   audience: AudienceAtelier
+
+  /** Couleur visuelle de l'atelier (vue Groupes). Défaut : "teal". */
+  couleur: CouleurAtelier
 
   /** Thématiques évaluées par le test de positionnement qui sont pertinentes
    *  pour cet atelier. L'algorithme se base sur les notes de ces thématiques. */
@@ -84,6 +102,7 @@ export interface FicheAtelier {
 export function emptyFiche(): FicheAtelier {
   return {
     audience: "eleves",
+    couleur: "teal",
     competencesCiblees: [],
     ageMin: null,
     ageMax: null,
@@ -118,6 +137,7 @@ export function migrateFiche<T extends FicheAtelierLegacy>(s: T): T & FicheAteli
   return {
     ...s,
     audience:               s.audience               ?? "eleves",
+    couleur:                s.couleur                ?? "teal",
     competencesCiblees:     s.competencesCiblees     ?? [],
     ageMin:                 s.ageMin                 ?? null,
     ageMax:                 s.ageMax                 ?? null,

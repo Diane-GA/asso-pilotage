@@ -177,11 +177,15 @@ function moyenneSur(
 export function composerGroupes(
   atelier: Pick<
     FicheAtelier,
-    "competencesCiblees" | "ageMin" | "ageMax" | "tailleGroupeCible" | "ratioEncadrement" | "mixerNiveaux"
+    "audience" | "competencesCiblees" | "ageMin" | "ageMax" | "tailleGroupeCible" | "ratioEncadrement" | "mixerNiveaux"
   > & { id: number; titre: string },
   beneficiaires: BeneficiairePourGroupage[],
   options: OptionsComposition = {},
 ): Brouillon {
+  // Pour les ateliers parents, on ignore complètement la notion d'âge :
+  // pas de filtre tranche, pas de regroupement par tranche, juste un tri
+  // par notes. Décision projet : les adultes n'ont pas de "tranche".
+  const ignoreAge = atelier.audience === "parents"
   // Ordonner les thématiques cochées selon le poids (principales d'abord).
   // Cet ordre détermine la priorité du tri lexicographique : la note sur la
   // thématique principale a le plus de poids dans le placement.
@@ -218,6 +222,7 @@ export function composerGroupes(
     }
     const age = ageOf(b.dateNaissance)
     if (
+      !ignoreAge &&
       age !== null &&
       ((atelier.ageMin !== null && age < atelier.ageMin) ||
         (atelier.ageMax !== null && age > atelier.ageMax))
@@ -266,47 +271,67 @@ export function composerGroupes(
   }
 
   // ── 3. Regroupement par tranche d'âge (barrière dure) ──
-  // Si l'atelier impose une tranche unique, le filtre âgeMin/âgeMax l'a déjà appliquée.
-  // On regroupe quand même par tranche pour produire des noms et stats par tranche
-  // si jamais l'atelier accepte une plage qui chevauche plusieurs tranches.
-  const parTranche = new Map<TrancheAge | "hors", BeneficiairePourGroupage[]>()
-  for (const b of eligibles) {
-    const age = ageOf(b.dateNaissance)
-    const tr  = trancheFor(age) ?? "hors"
-    if (!parTranche.has(tr)) parTranche.set(tr, [])
-    parTranche.get(tr)!.push(b)
-  }
-
-  // ── 4. Pour chaque tranche : tri + slicing / round-robin ──
+  // Pour les ateliers parents (audience=parents), on saute cette étape : un
+  // seul lot trié par notes, aucune notion de tranche.
+  // Pour les enfants : on regroupe par tranche pour produire des noms et stats
+  // par tranche si l'atelier accepte une plage qui chevauche plusieurs tranches.
   const groupes: GroupeBrouillon[] = []
   let groupeIndex = 1
 
-  for (const tranche of [...TRANCHES_AGE.map(t => t.key), "hors" as const]) {
-    const lot = parTranche.get(tranche) ?? []
-    if (lot.length === 0) continue
-
-    // Tri lexicographique sur les thématiques ciblées (descendant)
-    const trie = [...lot].sort((a, b) =>
+  if (ignoreAge) {
+    // Mode adultes : un seul lot trié par notes, puis slice/round-robin.
+    const trie = [...eligibles].sort((a, b) =>
       compareLex(vecteurNotes(a, dims), vecteurNotes(b, dims)),
     )
-
     const nGroupes = Math.max(1, Math.ceil(trie.length / taille))
     const repartition = atelier.mixerNiveaux
       ? repartirRoundRobin(trie, nGroupes)
       : sliceEnGroupes(trie, nGroupes)
-
     repartition.forEach((membres, i) => {
-      const trancheLabel = tranche === "hors"
-        ? "hors tranche"
-        : TRANCHES_AGE.find(t => t.key === tranche)?.label ?? tranche
       groupes.push({
-        id: `${atelier.id}-${tranche}-${i + 1}`,
-        nom: `${atelier.titre} · ${trancheLabel} · Groupe ${groupeIndex++}`,
-        tranche: tranche === "hors" ? null : tranche,
+        id: `${atelier.id}-adultes-${i + 1}`,
+        nom: `${atelier.titre} · Groupe ${groupeIndex++}`,
+        tranche: null,
         beneficiaireIds: membres.map(m => m.id),
         encadrantsRequis: encadrantsRequis(atelier.ratioEncadrement, membres.length),
       })
     })
+  } else {
+    const parTranche = new Map<TrancheAge | "hors", BeneficiairePourGroupage[]>()
+    for (const b of eligibles) {
+      const age = ageOf(b.dateNaissance)
+      const tr  = trancheFor(age) ?? "hors"
+      if (!parTranche.has(tr)) parTranche.set(tr, [])
+      parTranche.get(tr)!.push(b)
+    }
+
+    for (const tranche of [...TRANCHES_AGE.map(t => t.key), "hors" as const]) {
+      const lot = parTranche.get(tranche) ?? []
+      if (lot.length === 0) continue
+
+      // Tri lexicographique sur les thématiques ciblées (descendant)
+      const trie = [...lot].sort((a, b) =>
+        compareLex(vecteurNotes(a, dims), vecteurNotes(b, dims)),
+      )
+
+      const nGroupes = Math.max(1, Math.ceil(trie.length / taille))
+      const repartition = atelier.mixerNiveaux
+        ? repartirRoundRobin(trie, nGroupes)
+        : sliceEnGroupes(trie, nGroupes)
+
+      repartition.forEach((membres, i) => {
+        const trancheLabel = tranche === "hors"
+          ? "hors tranche"
+          : TRANCHES_AGE.find(t => t.key === tranche)?.label ?? tranche
+        groupes.push({
+          id: `${atelier.id}-${tranche}-${i + 1}`,
+          nom: `${atelier.titre} · ${trancheLabel} · Groupe ${groupeIndex++}`,
+          tranche: tranche === "hors" ? null : tranche,
+          beneficiaireIds: membres.map(m => m.id),
+          encadrantsRequis: encadrantsRequis(atelier.ratioEncadrement, membres.length),
+        })
+      })
+    }
   }
 
   return {

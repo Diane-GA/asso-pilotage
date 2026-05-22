@@ -14,7 +14,9 @@ import {
   emptyFiche,
   migrateFiche,
   encadrantsRequis,
+  COULEURS_ATELIER,
   type FicheAtelier,
+  type CouleurAtelier,
 } from "@/lib/atelier"
 import {
   composerGroupes,
@@ -22,10 +24,11 @@ import {
   type BeneficiairePourGroupage,
 } from "@/lib/group-composer"
 import Link from "next/link"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import {
   Plus, Pencil, CalendarDays, Users, UserCheck, ClipboardCheck,
   X, Columns3, Check, AlertTriangle, Sparkles, Shuffle,
-  ChevronDown, ChevronUp, ChevronRight, Search,
+  ChevronDown, ChevronRight, Search, GraduationCap,
 } from "lucide-react"
 import SlideOver, {
   Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton,
@@ -39,6 +42,7 @@ type SessionStatut = "planifié" | "en cours" | "terminé" | "annulé"
 type NiveauBenef   = "débutant" | "intermédiaire" | "avancé"
 type StatutBenef   = "actif" | "diplômé" | "abandon"
 type TypeGroupe    = "niveau" | "âge" | "mixte"
+type Audience      = "eleves" | "parents"
 
 interface Session extends FicheAtelier {
   id: number
@@ -127,6 +131,180 @@ function computeAge(dateNaissance: string): number {
 
 function initials(prenom: string, nom: string): string {
   return `${prenom[0] ?? ""}${nom[0] ?? ""}`.toUpperCase()
+}
+
+// ──────────────────────────────────────────────
+// Palette couleurs ateliers (Lot E)
+// Classes Tailwind énumérées en clair pour que le compilateur les détecte
+// au build (Tailwind v4 ne génère que les classes présentes dans le code source).
+// ──────────────────────────────────────────────
+const COULEUR_STYLES: Record<CouleurAtelier, {
+  swatch:      string // pastille pleine (picker)
+  blockBg:     string // fond du bloc atelier
+  blockBorder: string // bordure du bloc atelier
+  headerBg:    string // bandeau d'en-tête du bloc
+  headerText:  string // texte de l'en-tête
+  avatarBg:    string // fond des avatars membres
+  avatarText:  string // texte des avatars
+  dot:         string // petit dot couleur
+}> = {
+  teal: {
+    swatch: "bg-teal-500", blockBg: "bg-teal-50", blockBorder: "border-teal-200",
+    headerBg: "bg-teal-100", headerText: "text-teal-900",
+    avatarBg: "bg-teal-200", avatarText: "text-teal-900", dot: "bg-teal-500",
+  },
+  emerald: {
+    swatch: "bg-emerald-500", blockBg: "bg-emerald-50", blockBorder: "border-emerald-200",
+    headerBg: "bg-emerald-100", headerText: "text-emerald-900",
+    avatarBg: "bg-emerald-200", avatarText: "text-emerald-900", dot: "bg-emerald-500",
+  },
+  amber: {
+    swatch: "bg-amber-500", blockBg: "bg-amber-50", blockBorder: "border-amber-200",
+    headerBg: "bg-amber-100", headerText: "text-amber-900",
+    avatarBg: "bg-amber-200", avatarText: "text-amber-900", dot: "bg-amber-500",
+  },
+  orange: {
+    swatch: "bg-orange-500", blockBg: "bg-orange-50", blockBorder: "border-orange-200",
+    headerBg: "bg-orange-100", headerText: "text-orange-900",
+    avatarBg: "bg-orange-200", avatarText: "text-orange-900", dot: "bg-orange-500",
+  },
+  violet: {
+    swatch: "bg-violet-500", blockBg: "bg-violet-50", blockBorder: "border-violet-200",
+    headerBg: "bg-violet-100", headerText: "text-violet-900",
+    avatarBg: "bg-violet-200", avatarText: "text-violet-900", dot: "bg-violet-500",
+  },
+  slate: {
+    swatch: "bg-slate-500", blockBg: "bg-slate-50", blockBorder: "border-slate-200",
+    headerBg: "bg-slate-100", headerText: "text-slate-900",
+    avatarBg: "bg-slate-200", avatarText: "text-slate-900", dot: "bg-slate-500",
+  },
+}
+
+// Picker de couleurs réutilisable (utilisé dans le formulaire d'atelier).
+function CouleurPicker({
+  value, onChange,
+}: { value: CouleurAtelier; onChange: (c: CouleurAtelier) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Couleur de l'atelier">
+      {COULEURS_ATELIER.map(c => {
+        const sel = value === c.key
+        const styles = COULEUR_STYLES[c.key]
+        return (
+          <button
+            key={c.key}
+            type="button"
+            role="radio"
+            aria-checked={sel}
+            aria-label={c.label}
+            title={c.label}
+            onClick={() => onChange(c.key)}
+            className={`relative w-9 h-9 rounded-full transition-transform ${styles.swatch} ${
+              sel ? "ring-2 ring-offset-2 ring-foreground scale-110" : "hover:scale-105"
+            }`}
+          >
+            {sel && <Check size={16} className="absolute inset-0 m-auto text-white" aria-hidden="true" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// Sous-composant — Hub cards Enfants / Parents
+// Détermine le contexte (audience) pour toute la page Ateliers.
+// ──────────────────────────────────────────────
+function AudienceHubCards({
+  audience, counts, onChange,
+}: {
+  audience: Audience
+  counts: Record<Audience, { ateliers: number; benefs: number }>
+  onChange: (a: Audience) => void
+}) {
+  const hubs: Array<{
+    id: Audience
+    label: string
+    sublabel: string
+    Icon: typeof GraduationCap
+    bgActive: string
+    borderInactive: string
+    textActive: string
+    textInactive: string
+    iconBg: string
+    iconColor: string
+  }> = [
+    {
+      id: "eleves",
+      label: "Ateliers enfants",
+      sublabel: "Élèves mineurs",
+      Icon: GraduationCap,
+      bgActive: "bg-ateliers",
+      borderInactive: "border-ateliers/30",
+      textActive: "text-white",
+      textInactive: "text-ateliers-dark",
+      iconBg: "bg-ateliers-light",
+      iconColor: "text-ateliers-dark",
+    },
+    {
+      id: "parents",
+      label: "Ateliers parents",
+      sublabel: "Parents / adultes",
+      Icon: UserCheck,
+      bgActive: "bg-communication",
+      borderInactive: "border-communication/30",
+      textActive: "text-white",
+      textInactive: "text-communication-dark",
+      iconBg: "bg-communication-light",
+      iconColor: "text-communication-dark",
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6" role="tablist" aria-label="Type d'ateliers">
+      {hubs.map(h => {
+        const active = audience === h.id
+        const c = counts[h.id]
+        return (
+          <button
+            key={h.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={`hub-panel-${h.id}`}
+            id={`hub-tab-${h.id}`}
+            onClick={() => onChange(h.id)}
+            className={`text-left rounded-2xl p-5 transition-all border-2 ${
+              active
+                ? `${h.bgActive} ${h.textActive} border-transparent shadow-md`
+                : `bg-surface ${h.textInactive} ${h.borderInactive} hover:shadow-sm hover:-translate-y-0.5`
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <span
+                className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  active ? "bg-white/20" : h.iconBg
+                }`}
+                aria-hidden="true"
+              >
+                <h.Icon size={24} className={active ? "text-white" : h.iconColor} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[11px] font-semibold uppercase tracking-wider ${active ? "opacity-90" : "opacity-70"}`}>
+                  {h.sublabel}
+                </p>
+                <p className="text-lg font-bold mt-0.5">{h.label}</p>
+                <p className={`text-sm mt-2 ${active ? "opacity-95" : "opacity-80"}`}>
+                  <span className="font-semibold tabular-nums">{c.ateliers}</span> atelier{c.ateliers > 1 ? "s" : ""}
+                  <span className="mx-1.5 opacity-50">·</span>
+                  <span className="font-semibold tabular-nums">{c.benefs}</span> bénéficiaire{c.benefs > 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // ──────────────────────────────────────────────
@@ -272,6 +450,11 @@ function AteliersTab({
     // Groupes rattachés à cet atelier (rattachement explicite via atelierId).
     const groupesAtelier = groupes.filter(g => g.atelierId === s.id)
     const ouvert = !!groupesOuverts[s.id]
+    // Palette pilotée par l'audience pour garder la cohérence avec la card Hub.
+    const isParents = s.audience === "parents"
+    const chipBgTinted = isParents ? "bg-communication/10"   : "bg-ateliers/10"
+    const chipBgLight  = isParents ? "bg-communication-light": "bg-ateliers-light"
+    const chipText     = isParents ? "text-communication-dark": "text-ateliers-dark"
 
     return (
       <li className="px-5 py-4 flex items-start gap-4 hover:bg-slate-50 group">
@@ -285,7 +468,13 @@ function AteliersTab({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-medium text-foreground text-sm">{s.titre}</p>
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statutSessionStyle[s.statut]}`}>{s.statut}</span>
+            {/* Le badge "planifié" suit la couleur du hub pour garder le guide
+                visuel ; "en cours" / "terminé" / "annulé" gardent leur sémantique. */}
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              s.statut === "planifié" && isParents
+                ? "bg-communication-light text-communication-dark"
+                : statutSessionStyle[s.statut]
+            }`}>{s.statut}</span>
           </div>
           {s.description && <p className="text-xs text-muted mt-0.5 truncate">{s.description}</p>}
           {/* Compétences ciblées (Lot 2) */}
@@ -294,7 +483,7 @@ function AteliersTab({
               {s.competencesCiblees.map(c => {
                 const t = THEMATIQUES.find(x => x.key === c)
                 return t ? (
-                  <span key={c} className="text-[10px] bg-ateliers/10 text-ateliers-dark px-1.5 py-0.5 rounded font-medium">
+                  <span key={c} className={`text-[10px] ${chipBgTinted} ${chipText} px-1.5 py-0.5 rounded font-medium`}>
                     {t.short}
                   </span>
                 ) : null
@@ -306,7 +495,7 @@ function AteliersTab({
             {s.salle     && <span>📍 {s.salle}</span>}
             {s.formatrice && <span>👩‍🏫 {s.formatrice}</span>}
             {s.periode && (
-              <span className="text-ateliers-dark font-medium flex items-center gap-1">
+              <span className={`${chipText} font-medium flex items-center gap-1`}>
                 <CalendarDays size={10} /> {s.periode}
               </span>
             )}
@@ -314,10 +503,10 @@ function AteliersTab({
           <div className="flex items-center gap-4 mt-2 flex-wrap">
             {benefs.length > 0 && (
               <div className="flex items-center gap-1.5">
-                <Users size={11} className="text-ateliers-dark" />
+                <Users size={11} className={chipText} />
                 <div className="flex gap-1 flex-wrap">
                   {benefs.map(b => (
-                    <span key={b.id} className="text-[10px] bg-ateliers-light text-ateliers-dark px-1.5 py-0.5 rounded-full">
+                    <span key={b.id} className={`text-[10px] ${chipBgLight} ${chipText} px-1.5 py-0.5 rounded-full`}>
                       {b.prenom} {b.nom}
                     </span>
                   ))}
@@ -347,7 +536,7 @@ function AteliersTab({
                 <button
                   type="button"
                   onClick={() => toggleGroupes(s.id)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-ateliers-dark hover:underline"
+                  className={`flex items-center gap-1.5 text-xs font-medium ${chipText} hover:underline`}
                 >
                   {ouvert ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                   {ouvert ? "Masquer" : "Voir"} les groupes ({groupesAtelier.length})
@@ -362,7 +551,7 @@ function AteliersTab({
                         <li key={g.id} className="rounded-lg bg-slate-50 border border-border px-3 py-2">
                           <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
                             <p className="text-xs font-semibold text-foreground">{g.nom}</p>
-                            <span className="text-[10px] bg-ateliers-light text-ateliers-dark px-1.5 py-0.5 rounded-full">
+                            <span className={`text-[10px] ${chipBgLight} ${chipText} px-1.5 py-0.5 rounded-full`}>
                               {membres.length} bénéficiaire{membres.length > 1 ? "s" : ""}
                             </span>
                           </div>
@@ -395,7 +584,7 @@ function AteliersTab({
             <Link
               href="/emargement"
               onClick={() => localStorage.setItem("asso-emargement-session", String(s.id))}
-              className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-ateliers-light text-ateliers-dark hover:opacity-80 transition-opacity"
+              className={`flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg ${chipBgLight} ${chipText} hover:opacity-80 transition-opacity`}
             >
               <ClipboardCheck size={11} /> Émarger
             </Link>
@@ -511,7 +700,10 @@ function AteliersTab({
 }
 
 // ══════════════════════════════════════════════
-// ONGLET GROUPES
+// ONGLET GROUPES — Lot E
+// Vue regroupée par atelier : chaque atelier forme un bloc visuel coloré
+// (couleur configurée dans le formulaire d'atelier). Les groupes manuels
+// (sans atelier rattaché) sont rassemblés dans un bloc neutre en fin de liste.
 // ══════════════════════════════════════════════
 function GroupesTab({
   groupes, beneficiaires, sessions, onEdit,
@@ -521,97 +713,65 @@ function GroupesTab({
   sessions: Session[]
   onEdit: (g: Groupe) => void
 }) {
-  // ── Filtres (tous en barre haute pour cohérence cross-pages) ──
-  const [search, setSearch]               = useState("")
-  const [filterAtelier, setFilterAtelier] = useState<string>("tous")
-  const [filterType, setFilterType]       = useState<TypeGroupe | "tous">("tous")
+  // Seul un champ recherche est conservé (la séparation visuelle par atelier
+  // remplace les filtres atelier/type qui faisaient doublon).
+  const [search, setSearch] = useState("")
 
-  // ── Tri ──
-  type SortKey = "atelier" | "groupe" | "effectif"
-  const [sortKey, setSortKey]     = useState<SortKey>("atelier")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortOrder(o => o === "asc" ? "desc" : "asc")
-    else { setSortKey(key); setSortOrder("asc") }
-  }
-
-  // ── Helpers ──
   function getMembers(g: Groupe): Beneficiaire[] {
     return g.beneficiaireIds
       .map(id => beneficiaires.find(b => b.id === id))
       .filter((b): b is Beneficiaire => Boolean(b))
   }
-  function getAtelierTitre(atelierId: number | null): string {
-    if (atelierId === null) return ""
-    return sessions.find(s => s.id === atelierId)?.titre ?? "Atelier supprimé"
-  }
 
-  // Ateliers présents dans au moins un groupe (pour peupler le select).
-  const ateliersAvecGroupes = Array.from(new Set(groupes.map(g => g.atelierId)))
-    .filter((id): id is number => id !== null)
-    .map(id => sessions.find(s => s.id === id))
-    .filter((s): s is Session => Boolean(s))
-    .sort((a, b) => a.titre.localeCompare(b.titre))
-  const aGroupesManuels = groupes.some(g => g.atelierId === null)
-
-  // ── Filtrage ──
+  // Filtrage texte (groupe / membre / titre atelier).
   const q = search.trim().toLowerCase()
   const filtered = groupes.filter(g => {
-    if (filterAtelier === "sans") {
-      if (g.atelierId !== null) return false
-    } else if (filterAtelier !== "tous") {
-      if (String(g.atelierId) !== filterAtelier) return false
-    }
-    if (filterType !== "tous" && g.type !== filterType) return false
     if (!q) return true
     if (g.nom.toLowerCase().includes(q)) return true
-    if (getAtelierTitre(g.atelierId).toLowerCase().includes(q)) return true
+    const atTitre = g.atelierId !== null ? (sessions.find(s => s.id === g.atelierId)?.titre ?? "") : ""
+    if (atTitre.toLowerCase().includes(q)) return true
     return getMembers(g).some(b =>
       `${b.prenom} ${b.nom}`.toLowerCase().includes(q),
     )
   })
 
-  // ── Tri ──
-  const sorted = [...filtered].sort((a, b) => {
-    const factor = sortOrder === "asc" ? 1 : -1
-    if (sortKey === "atelier") {
-      const ta = getAtelierTitre(a.atelierId) || "zzz" // manuels en fin
-      const tb = getAtelierTitre(b.atelierId) || "zzz"
-      if (ta !== tb) return ta.localeCompare(tb) * factor
-      return a.nom.localeCompare(b.nom) * factor
+  // Regroupement par atelier. Clés : atelier id stringifié, ou "manual" pour les
+  // groupes sans atelier rattaché.
+  type Section = {
+    key: string
+    titre: string
+    couleur: CouleurAtelier
+    groupes: Groupe[]
+  }
+  const sectionsMap = new Map<string, Section>()
+  for (const g of filtered) {
+    const k = g.atelierId === null ? "manual" : String(g.atelierId)
+    if (!sectionsMap.has(k)) {
+      if (g.atelierId === null) {
+        sectionsMap.set(k, { key: k, titre: "Groupes manuels", couleur: "slate", groupes: [] })
+      } else {
+        const at = sessions.find(s => s.id === g.atelierId)
+        sectionsMap.set(k, {
+          key: k,
+          titre: at?.titre ?? "Atelier supprimé",
+          couleur: at?.couleur ?? "teal",
+          groupes: [],
+        })
+      }
     }
-    if (sortKey === "groupe")   return a.nom.localeCompare(b.nom) * factor
-    if (sortKey === "effectif") return (a.beneficiaireIds.length - b.beneficiaireIds.length) * factor
-    return 0
-  })
-
-  const filtreActif = q !== "" || filterAtelier !== "tous" || filterType !== "tous"
-  function resetFiltres() {
-    setSearch("")
-    setFilterAtelier("tous")
-    setFilterType("tous")
+    sectionsMap.get(k)!.groupes.push(g)
   }
-
-  // Sous-composant : en-tête de colonne triable
-  function SortHeader({ keyName, label }: { keyName: SortKey; label: string }) {
-    const active = sortKey === keyName
-    return (
-      <button
-        type="button"
-        onClick={() => toggleSort(keyName)}
-        className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wider transition-colors ${
-          active ? "text-foreground" : "text-muted hover:text-foreground"
-        }`}
-      >
-        {label}
-        {active && (sortOrder === "asc" ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
-      </button>
-    )
-  }
+  // Ordre : ateliers triés par titre, manuels à la fin.
+  const sections: Section[] = Array.from(sectionsMap.values())
+    .sort((a, b) => {
+      if (a.key === "manual") return 1
+      if (b.key === "manual") return -1
+      return a.titre.localeCompare(b.titre)
+    })
 
   return (
-    <div className="space-y-4">
-      {/* ── Filtres (barre haute unifiée) ── */}
+    <div className="space-y-5">
+      {/* ── Recherche (filtres atelier/type retirés — la séparation par bloc les rend inutiles) ── */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -628,131 +788,115 @@ function GroupesTab({
             </button>
           )}
         </div>
-        <select
-          value={filterAtelier}
-          onChange={e => setFilterAtelier(e.target.value)}
-          className="text-sm rounded-xl border border-border bg-surface px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ateliers/30"
-        >
-          <option value="tous">Tous les ateliers</option>
-          {ateliersAvecGroupes.map(s => (
-            <option key={s.id} value={String(s.id)}>{s.titre}</option>
-          ))}
-          {aGroupesManuels && <option value="sans">— Groupes manuels —</option>}
-        </select>
-        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-          {(["tous", "niveau", "mixte", "âge"] as const).map(t => (
-            <button
-              type="button"
-              key={t}
-              onClick={() => setFilterType(t)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                filterType === t ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"
-              }`}
-            >
-              {t === "tous" ? "Tous types" : t}
-            </button>
-          ))}
-        </div>
-        {filtreActif && (
+        {q !== "" && (
           <div className="flex items-center gap-2 ml-auto">
             <span className="text-xs text-muted">{filtered.length} résultat{filtered.length > 1 ? "s" : ""}</span>
-            <button type="button" onClick={resetFiltres} className="text-xs text-muted hover:text-foreground hover:underline">
+            <button type="button" onClick={() => setSearch("")} className="text-xs text-muted hover:text-foreground hover:underline">
               Réinitialiser
             </button>
           </div>
         )}
       </div>
 
-      {/* ── Table ── */}
+      {/* ── Blocs par atelier ── */}
       {groupes.length === 0 ? (
         <p className="text-center text-sm text-muted py-12 italic">Aucun groupe constitué.</p>
-      ) : sorted.length === 0 ? (
+      ) : sections.length === 0 ? (
         <p className="text-center text-sm text-muted py-12 italic">
-          Aucun groupe ne correspond aux filtres actuels.
+          Aucun groupe ne correspond à la recherche.
         </p>
       ) : (
-        <div className="bg-surface rounded-xl border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr className="border-b border-border">
-                <th className="px-4 py-2.5 text-left"><SortHeader keyName="atelier"  label="Atelier"  /></th>
-                <th className="px-4 py-2.5 text-left"><SortHeader keyName="groupe"   label="Groupe"   /></th>
-                <th className="px-4 py-2.5 text-left"><SortHeader keyName="effectif" label="Effectif" /></th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted uppercase tracking-wider">
-                  Aperçu des membres
-                </th>
-                <th className="w-10 px-2" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {sorted.map(g => {
-                const members = getMembers(g)
-                const titre   = getAtelierTitre(g.atelierId)
-                return (
-                  <tr
-                    key={g.id}
-                    onClick={() => onEdit(g)}
-                    className="hover:bg-slate-50 cursor-pointer group/row"
-                  >
-                    <td className="px-4 py-3 text-xs align-top">
-                      {g.atelierId === null ? (
-                        <span className="text-muted italic">— manuel —</span>
-                      ) : (
-                        <span className="font-medium text-foreground">{titre}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <p className="text-xs font-semibold text-foreground">{g.nom}</p>
-                      <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded ${typeGroupeStyle[g.type]}`}>
-                        {g.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-foreground tabular-nums align-top">
-                      {members.length}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      {members.length === 0 ? (
-                        <span className="text-[11px] text-muted italic">Aucun membre</span>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="flex -space-x-1.5">
-                            {members.slice(0, 5).map(b => (
-                              <div
-                                key={b.id}
-                                title={`${b.prenom} ${b.nom}`}
-                                className="w-6 h-6 rounded-full bg-ateliers-light border-2 border-surface flex items-center justify-center shrink-0"
-                              >
-                                <span className="text-[9px] font-bold text-ateliers-dark">{initials(b.prenom, b.nom)}</span>
-                              </div>
-                            ))}
-                            {members.length > 5 && (
-                              <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-surface flex items-center justify-center shrink-0">
-                                <span className="text-[9px] font-bold text-slate-500">+{members.length - 5}</span>
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-muted truncate max-w-xs">
-                            {members.slice(0, 3).map(b => `${b.prenom} ${b.nom}`).join(", ")}
-                            {members.length > 3 && ` · +${members.length - 3}`}
+        <div className="space-y-4">
+          {sections.map(section => {
+            const styles = COULEUR_STYLES[section.couleur]
+            return (
+              <section
+                key={section.key}
+                className={`rounded-xl border ${styles.blockBorder} ${styles.blockBg} overflow-hidden`}
+                aria-label={`Groupes de l'atelier ${section.titre}`}
+              >
+                {/* En-tête coloré */}
+                <header className={`${styles.headerBg} px-4 py-3 flex items-center justify-between gap-3 border-b ${styles.blockBorder}`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${styles.dot}`}
+                      aria-hidden="true"
+                    />
+                    <h3 className={`text-sm font-semibold truncate ${styles.headerText}`}>
+                      {section.titre}
+                    </h3>
+                  </div>
+                  <span className={`text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full bg-white/70 ${styles.headerText} shrink-0`}>
+                    {section.groupes.length} groupe{section.groupes.length > 1 ? "s" : ""}
+                  </span>
+                </header>
+
+                {/* Liste des groupes */}
+                <ul className="divide-y divide-white/60">
+                  {section.groupes.map(g => {
+                    const members = getMembers(g)
+                    return (
+                      <li
+                        key={g.id}
+                        onClick={() => onEdit(g)}
+                        className="px-4 py-3 flex items-center gap-4 hover:bg-white/60 cursor-pointer group/row"
+                      >
+                        {/* Nom + type */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{g.nom}</p>
+                          <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded ${typeGroupeStyle[g.type]}`}>
+                            {g.type}
                           </span>
                         </div>
-                      )}
-                    </td>
-                    <td className="px-2 py-3 align-top">
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); onEdit(g) }}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-muted opacity-0 group-hover/row:opacity-100 transition-opacity"
-                        aria-label="Modifier le groupe"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+
+                        {/* Effectif */}
+                        <div className="text-center shrink-0 w-12">
+                          <p className="text-lg font-bold text-foreground tabular-nums leading-none">{members.length}</p>
+                          <p className="text-[10px] text-muted uppercase tracking-wider mt-0.5">membre{members.length > 1 ? "s" : ""}</p>
+                        </div>
+
+                        {/* Aperçu membres (avatars colorés à la couleur de l'atelier) */}
+                        <div className="shrink-0 min-w-0 max-w-xs">
+                          {members.length === 0 ? (
+                            <span className="text-[11px] text-muted italic">Aucun membre</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="flex -space-x-1.5">
+                                {members.slice(0, 5).map(b => (
+                                  <div
+                                    key={b.id}
+                                    title={`${b.prenom} ${b.nom}`}
+                                    className={`w-7 h-7 rounded-full ${styles.avatarBg} border-2 border-white flex items-center justify-center shrink-0`}
+                                  >
+                                    <span className={`text-[10px] font-bold ${styles.avatarText}`}>{initials(b.prenom, b.nom)}</span>
+                                  </div>
+                                ))}
+                                {members.length > 5 && (
+                                  <div className="w-7 h-7 rounded-full bg-white/80 border-2 border-white flex items-center justify-center shrink-0">
+                                    <span className="text-[10px] font-bold text-slate-600">+{members.length - 5}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action éditer */}
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); onEdit(g) }}
+                          className="p-1.5 rounded-lg hover:bg-white text-muted opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0"
+                          aria-label="Modifier le groupe"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )
+          })}
         </div>
       )}
     </div>
@@ -771,6 +915,18 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"]
 
 export default function AteliersPage() {
+  // ── Audience (hub Enfants / Parents) — synchronisée avec l'URL pour
+  //    permettre le partage de liens et préserver l'état au refresh / back. ──
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+  const pathname     = usePathname()
+  const audience: Audience = searchParams.get("audience") === "parents" ? "parents" : "eleves"
+  function setAudience(a: Audience) {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("audience", a)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
   const [tab, setTab] = useState<TabId>("ateliers")
   const [toast, setToast] = useState<{ message: string } | null>(null)
 
@@ -832,7 +988,10 @@ export default function AteliersPage() {
   function openNewSession() {
     // Re-lecture des membres : capte un ajout fait sur /membres pendant la session.
     refreshMembres()
-    setEditingSession(null); setSessionForm(emptySession()); setSessionSlide(true)
+    // L'atelier hérite de l'audience du hub courant pour rester dans le contexte.
+    setEditingSession(null)
+    setSessionForm({ ...emptySession(), audience })
+    setSessionSlide(true)
   }
   function openEditSession(s: Session) {
     refreshMembres()
@@ -853,11 +1012,16 @@ export default function AteliersPage() {
     // moins une compétence cochée. Ça démarre le travail pour la collaboratrice
     // sans qu'elle ait à aller cliquer sur "Générer" depuis l'onglet brouillon.
     if (isNew && nouvelle.competencesCiblees.length > 0) {
-      const inputs: BeneficiairePourGroupage[] = beneficiaires.map(b => ({
-        id: b.id, prenom: b.prenom, nom: b.nom,
-        dateNaissance: b.dateNaissance, statut: b.statut,
-        positionnementInitial: b.positionnementInitial,
-      }))
+      // Filtre la pool à l'audience de l'atelier : un atelier enfants ne doit
+      // pas composer ses groupes à partir des parents (et inversement).
+      const expectedType: TypeBeneficiaire = nouvelle.audience === "parents" ? "parent" : "eleve"
+      const inputs: BeneficiairePourGroupage[] = beneficiaires
+        .filter(b => b.type === expectedType)
+        .map(b => ({
+          id: b.id, prenom: b.prenom, nom: b.nom,
+          dateNaissance: b.dateNaissance, statut: b.statut,
+          positionnementInitial: b.positionnementInitial,
+        }))
       const brouillon = composerGroupes(nouvelle, inputs)
       saveBrouillon(brouillon)
       setToast({
@@ -947,10 +1111,40 @@ export default function AteliersPage() {
     persistGroupes(groupes.map(g => g.id === groupeId ? { ...g, beneficiaireIds } : g))
   }
 
-  // ── Derived stats ──
-  const aVenir         = sessions.filter(s => s.statut === "planifié" || s.statut === "en cours").length
-  const benefActifs    = beneficiaires.filter(b => b.statut === "actif").length
-  const groupesCount   = groupes.length
+  // ── Filtrage par audience (Lot D) ──
+  // Une session a un champ `audience` ; on filtre toutes les vues par celui-ci.
+  // Pour les groupes : on garde ceux dont l'atelier rattaché correspond à
+  // l'audience. Les groupes manuels (atelierId=null) sont neutres et
+  // apparaissent dans les deux contextes.
+  const sessionsForAudience = sessions.filter(s => s.audience === audience)
+  const groupesForAudience  = groupes.filter(g => {
+    if (g.atelierId === null) return true
+    const atelier = sessions.find(s => s.id === g.atelierId)
+    return atelier ? atelier.audience === audience : true
+  })
+
+  // Bénéficiaires affichés dans le contexte : élèves pour audience=eleves,
+  // parents pour audience=parents.
+  const benefsForAudience = beneficiaires.filter(b =>
+    audience === "eleves" ? b.type === "eleve" : b.type === "parent",
+  )
+
+  // ── Counters pour les cartes Hub (calculés sur les données globales) ──
+  const hubCounts: Record<Audience, { ateliers: number; benefs: number }> = {
+    eleves: {
+      ateliers: sessions.filter(s => s.audience === "eleves").length,
+      benefs:   beneficiaires.filter(b => b.type === "eleve").length,
+    },
+    parents: {
+      ateliers: sessions.filter(s => s.audience === "parents").length,
+      benefs:   beneficiaires.filter(b => b.type === "parent").length,
+    },
+  }
+
+  // ── Derived stats (audience-aware) ──
+  const aVenir         = sessionsForAudience.filter(s => s.statut === "planifié" || s.statut === "en cours").length
+  const benefActifs    = benefsForAudience.filter(b => b.statut === "actif").length
+  const groupesCount   = groupesForAudience.length
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -980,15 +1174,23 @@ export default function AteliersPage() {
         </div>
       </header>
 
-      {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-ateliers-light rounded-xl border border-ateliers/20 p-4">
-          <p className="text-3xl font-bold text-ateliers-dark">{aVenir}</p>
-          <p className="text-sm text-ateliers-dark/70 mt-1">Ateliers à venir</p>
+      {/* Hub cards Enfants / Parents (Lot D) */}
+      <AudienceHubCards audience={audience} counts={hubCounts} onChange={setAudience} />
+
+      {/* Stats bar — audience-aware */}
+      <div
+        id={`hub-panel-${audience}`}
+        role="tabpanel"
+        aria-labelledby={`hub-tab-${audience}`}
+        className="grid grid-cols-3 gap-4 mb-6"
+      >
+        <div className={`rounded-xl border p-4 ${audience === "parents" ? "bg-communication-light border-communication/20" : "bg-ateliers-light border-ateliers/20"}`}>
+          <p className={`text-3xl font-bold ${audience === "parents" ? "text-communication-dark" : "text-ateliers-dark"}`}>{aVenir}</p>
+          <p className={`text-sm mt-1 ${audience === "parents" ? "text-communication-dark/70" : "text-ateliers-dark/70"}`}>Ateliers à venir</p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
           <p className="text-3xl font-bold text-foreground">{benefActifs}</p>
-          <p className="text-sm text-muted mt-1">Bénéficiaires actifs</p>
+          <p className="text-sm text-muted mt-1">{audience === "parents" ? "Parents actifs" : "Élèves actifs"}</p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
           <p className="text-3xl font-bold text-foreground">{groupesCount}</p>
@@ -1014,25 +1216,25 @@ export default function AteliersPage() {
       {/* Tab content */}
       {tab === "ateliers" && (
         <AteliersTab
-          sessions={sessions}
+          sessions={sessionsForAudience}
           beneficiaires={beneficiaires}
           benevoles={benevoles}
-          groupes={groupes}
+          groupes={groupesForAudience}
           onEdit={openEditSession}
         />
       )}
       {tab === "groupes" && (
         <GroupesTab
-          groupes={groupes}
+          groupes={groupesForAudience}
           beneficiaires={beneficiaires}
-          sessions={sessions}
+          sessions={sessionsForAudience}
           onEdit={openEditGroupe}
         />
       )}
       {tab === "brouillon" && (
         <BrouillonGroupesTab
-          sessions={sessions}
-          beneficiaires={beneficiaires}
+          sessions={sessionsForAudience}
+          beneficiaires={benefsForAudience}
           onGroupesValides={(nouveaux, atelierId) => {
             // Remplace les groupes deja rattaches a cet atelier (atelierId
             // identique) — sinon, revalider un brouillon dupliquerait les
@@ -1137,6 +1339,17 @@ export default function AteliersPage() {
             />
           </Field>
 
+          {/* ── Couleur de l'atelier (Lot E — vue Groupes) ── */}
+          <Field label="Couleur de l'atelier">
+            <p className="text-[11px] text-muted mb-2">
+              Sert à distinguer visuellement les ateliers dans la vue Groupes.
+            </p>
+            <CouleurPicker
+              value={sessionForm.couleur}
+              onChange={c => setSessionForm(f => ({ ...f, couleur: c }))}
+            />
+          </Field>
+
           {/* ── Compétences travaillées ── */}
           <div className="rounded-xl border border-ateliers/30 bg-ateliers-light/40 p-3">
             <p className="text-xs font-semibold text-ateliers-dark uppercase tracking-wider mb-2">
@@ -1177,16 +1390,17 @@ export default function AteliersPage() {
             )}
           </div>
 
-          {/* ── Paramètres de groupage ── */}
+          {/* ── Paramètres de groupage ──
+              Pour les ateliers parents : ni notion d'âge, ni ratio d'encadrement. */}
           <div className="rounded-xl border border-border bg-surface/50 p-3">
             <p className="text-xs font-semibold text-foreground uppercase tracking-wider mb-3">
               Paramètres de groupage
             </p>
             <p className="text-[11px] text-muted mb-3">
               Définissent comment l&apos;algorithme construira les groupes du brouillon.
-              L&apos;âge des bénéficiaires est géré automatiquement par tranches (6-9, 10-13, 14-18 ans).
+              {sessionForm.audience !== "parents" && " L'âge des bénéficiaires est géré automatiquement par tranches (6-9, 10-13, 14-18 ans)."}
             </p>
-            <FormRow>
+            {sessionForm.audience === "parents" ? (
               <Field label="Taille de groupe cible">
                 <Input
                   type="number" min={2} max={30} placeholder="10"
@@ -1196,21 +1410,35 @@ export default function AteliersPage() {
                   }))}
                 />
               </Field>
-              <Field label="Ratio encadrement (1 pour N)">
-                <Input
-                  type="number" min={1} max={20} placeholder="(optionnel)"
-                  value={sessionForm.ratioEncadrement ?? ""}
-                  onChange={e => setSessionForm(f => ({
-                    ...f, ratioEncadrement: e.target.value === "" ? null : Number(e.target.value),
-                  }))}
-                />
-              </Field>
-            </FormRow>
-            {sessionForm.ratioEncadrement !== null && sessionForm.tailleGroupeCible !== null && (
-              <p className="text-[11px] text-muted mt-1">
-                → {encadrantsRequis(sessionForm.ratioEncadrement, sessionForm.tailleGroupeCible)} encadrant·es
-                requis par groupe de {sessionForm.tailleGroupeCible}.
-              </p>
+            ) : (
+              <>
+                <FormRow>
+                  <Field label="Taille de groupe cible">
+                    <Input
+                      type="number" min={2} max={30} placeholder="10"
+                      value={sessionForm.tailleGroupeCible ?? ""}
+                      onChange={e => setSessionForm(f => ({
+                        ...f, tailleGroupeCible: e.target.value === "" ? null : Number(e.target.value),
+                      }))}
+                    />
+                  </Field>
+                  <Field label="Ratio encadrement (1 pour N)">
+                    <Input
+                      type="number" min={1} max={20} placeholder="(optionnel)"
+                      value={sessionForm.ratioEncadrement ?? ""}
+                      onChange={e => setSessionForm(f => ({
+                        ...f, ratioEncadrement: e.target.value === "" ? null : Number(e.target.value),
+                      }))}
+                    />
+                  </Field>
+                </FormRow>
+                {sessionForm.ratioEncadrement !== null && sessionForm.tailleGroupeCible !== null && (
+                  <p className="text-[11px] text-muted mt-1">
+                    → {encadrantsRequis(sessionForm.ratioEncadrement, sessionForm.tailleGroupeCible)} encadrant·es
+                    requis par groupe de {sessionForm.tailleGroupeCible}.
+                  </p>
+                )}
+              </>
             )}
             <label className="flex items-center gap-2 mt-3 cursor-pointer">
               <input
@@ -1313,46 +1541,71 @@ export default function AteliersPage() {
             </div>
           </Field>
 
-          {/* Bénéficiaires — multi-select */}
-          <Field label="Bénéficiaires">
-            <div className="flex flex-wrap gap-2 mb-2">
-              {beneficiaires.map(b => {
-                const sel = sessionForm.beneficiaireIds.includes(b.id)
-                return (
-                  <button
-                    type="button"
-                    key={b.id}
-                    onClick={() => toggleBenefInSession(b.id)}
-                    className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                      sel
-                        ? "bg-ateliers text-white border-ateliers"
-                        : "bg-surface text-muted border-border hover:border-ateliers"
-                    }`}
-                  >
-                    {b.prenom} {b.nom}
-                  </button>
-                )
-              })}
-            </div>
-            {/* Import groupe */}
-            {groupes.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-border">
-                <p className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">Importer un groupe</p>
-                <div className="flex flex-wrap gap-2">
-                  {groupes.map(g => (
-                    <button
-                      type="button"
-                      key={g.id}
-                      onClick={() => importGroupeIntoSession(g.id)}
-                      className="text-xs px-3 py-1.5 rounded-full border font-medium border-ateliers/40 text-ateliers-dark hover:bg-ateliers-light transition-colors"
-                    >
-                      + {g.nom}
-                    </button>
-                  ))}
+          {/* Bénéficiaires — multi-select. Filtré par audience de la session :
+              ateliers enfants → uniquement élèves ; ateliers parents → uniquement parents. */}
+          {(() => {
+            const expectedType: TypeBeneficiaire = sessionForm.audience === "parents" ? "parent" : "eleve"
+            const benefsFiltres = beneficiaires.filter(b => b.type === expectedType)
+            // Groupes importables : ceux dont l'atelier d'origine a la même audience.
+            // Groupes manuels (atelierId=null) : on les inclut s'ils contiennent
+            // au moins un membre du bon type — sinon ils n'ont rien à faire ici.
+            const groupesImportables = groupes.filter(g => {
+              if (g.atelierId === null) {
+                return g.beneficiaireIds.some(id => {
+                  const b = beneficiaires.find(x => x.id === id)
+                  return b?.type === expectedType
+                })
+              }
+              const at = sessions.find(s => s.id === g.atelierId)
+              return at ? at.audience === sessionForm.audience : false
+            })
+            const labelBenef = sessionForm.audience === "parents" ? "Bénéficiaires (parents)" : "Bénéficiaires (élèves)"
+            return (
+              <Field label={labelBenef}>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {benefsFiltres.length === 0 ? (
+                    <p className="text-[11px] text-muted italic">
+                      Aucun {expectedType === "parent" ? "parent" : "élève"} enregistré. Ajoute-en depuis la page Bénéficiaires.
+                    </p>
+                  ) : benefsFiltres.map(b => {
+                    const sel = sessionForm.beneficiaireIds.includes(b.id)
+                    return (
+                      <button
+                        type="button"
+                        key={b.id}
+                        onClick={() => toggleBenefInSession(b.id)}
+                        className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                          sel
+                            ? "bg-ateliers text-white border-ateliers"
+                            : "bg-surface text-muted border-border hover:border-ateliers"
+                        }`}
+                      >
+                        {b.prenom} {b.nom}
+                      </button>
+                    )
+                  })}
                 </div>
-              </div>
-            )}
-          </Field>
+                {/* Import groupe — filtré par audience */}
+                {groupesImportables.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <p className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">Importer un groupe</p>
+                    <div className="flex flex-wrap gap-2">
+                      {groupesImportables.map(g => (
+                        <button
+                          type="button"
+                          key={g.id}
+                          onClick={() => importGroupeIntoSession(g.id)}
+                          className="text-xs px-3 py-1.5 rounded-full border font-medium border-ateliers/40 text-ateliers-dark hover:bg-ateliers-light transition-colors"
+                        >
+                          + {g.nom}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Field>
+            )
+          })()}
 
           <SaveButton />
           {editingSession && <DeleteButton onClick={handleDeleteSession} />}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { ateliers as ateliersMock } from "@/lib/mock-data"
 import {
   THEMATIQUES,
@@ -13,7 +14,7 @@ import {
   type TypeBeneficiaire,
 } from "@/lib/positionnement"
 import SlideOver, { Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
-import { Plus, Pencil, Search, Phone, GraduationCap, Users, X, AlertTriangle } from "lucide-react"
+import { Plus, Pencil, Search, Phone, GraduationCap, Users, UserCheck, X, AlertTriangle } from "lucide-react"
 
 // ──────────────────────────────────────────────
 // Types
@@ -125,9 +126,117 @@ const empty = (): Omit<Beneficiaire, "id"> => ({
 })
 
 // ──────────────────────────────────────────────
+// Sous-composant — Hub cards Élèves / Parents
+// Sélecteur de population principal, synchronisé avec l'URL (?type=eleve|parent).
+// ──────────────────────────────────────────────
+function TypeBenefHubCards({
+  type, counts, onChange,
+}: {
+  type: TypeBeneficiaire
+  counts: Record<TypeBeneficiaire, { total: number; actifs: number; diplomes: number }>
+  onChange: (t: TypeBeneficiaire) => void
+}) {
+  const hubs: Array<{
+    id: TypeBeneficiaire
+    label: string
+    sublabel: string
+    Icon: typeof GraduationCap
+    bgActive: string
+    borderInactive: string
+    textActive: string
+    textInactive: string
+    iconBg: string
+    iconColor: string
+  }> = [
+    {
+      id: "eleve",
+      label: "Élèves",
+      sublabel: "Enfants & adolescents",
+      Icon: GraduationCap,
+      bgActive: "bg-ateliers",
+      borderInactive: "border-ateliers/30",
+      textActive: "text-white",
+      textInactive: "text-ateliers-dark",
+      iconBg: "bg-ateliers-light",
+      iconColor: "text-ateliers-dark",
+    },
+    {
+      id: "parent",
+      label: "Parents / adultes",
+      sublabel: "Adultes bénéficiaires",
+      Icon: UserCheck,
+      bgActive: "bg-communication",
+      borderInactive: "border-communication/30",
+      textActive: "text-white",
+      textInactive: "text-communication-dark",
+      iconBg: "bg-communication-light",
+      iconColor: "text-communication-dark",
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6" role="tablist" aria-label="Type de bénéficiaire">
+      {hubs.map(h => {
+        const active = type === h.id
+        const c = counts[h.id]
+        return (
+          <button
+            key={h.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={`benef-hub-panel-${h.id}`}
+            id={`benef-hub-tab-${h.id}`}
+            onClick={() => onChange(h.id)}
+            className={`text-left rounded-2xl p-5 transition-all border-2 ${
+              active
+                ? `${h.bgActive} ${h.textActive} border-transparent shadow-md`
+                : `bg-surface ${h.textInactive} ${h.borderInactive} hover:shadow-sm hover:-translate-y-0.5`
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <span
+                className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  active ? "bg-white/20" : h.iconBg
+                }`}
+                aria-hidden="true"
+              >
+                <h.Icon size={24} className={active ? "text-white" : h.iconColor} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[11px] font-semibold uppercase tracking-wider ${active ? "opacity-90" : "opacity-70"}`}>
+                  {h.sublabel}
+                </p>
+                <p className="text-lg font-bold mt-0.5">{h.label}</p>
+                <p className={`text-sm mt-2 ${active ? "opacity-95" : "opacity-80"}`}>
+                  <span className="font-semibold tabular-nums">{c.actifs}</span> actif{c.actifs > 1 ? "s" : ""}
+                  <span className="mx-1.5 opacity-50">·</span>
+                  <span className="font-semibold tabular-nums">{c.total}</span> au total
+                </p>
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
 // Page
 // ──────────────────────────────────────────────
 export default function BeneficiairesPage() {
+  // ── Type (hub Élèves / Parents) — synchronisé avec l'URL ──
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+  const pathname     = usePathname()
+  const type: TypeBeneficiaire = searchParams.get("type") === "parent" ? "parent" : "eleve"
+  function setType(t: TypeBeneficiaire) {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("type", t)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
   const [beneficiaires, setBenef]   = useState<Beneficiaire[]>(ateliersMock.beneficiaires as Beneficiaire[])
   const [groupes, setGroupes]       = useState<Groupe[]>(ateliersMock.groupes as Groupe[])
   const [sessions, setSessions]     = useState<{ id: number; beneficiaireIds: number[]; statut: string }[]>(ateliersMock.sessions)
@@ -139,6 +248,10 @@ export default function BeneficiairesPage() {
   const [slideOpen, setSlideOpen]   = useState(false)
   const [editing, setEditing]       = useState<Beneficiaire | null>(null)
   const [form, setForm]             = useState<Omit<Beneficiaire, "id">>(empty())
+  // État local pour le SlideOver d'un parent : ids des élèves rattachés à
+  // ce parent (le lien est porté côté élève dans b.parentIds, la cascade se
+  // fait au handleSave).
+  const [selectedEnfantIds, setSelectedEnfantIds] = useState<number[]>([])
 
   useEffect(() => {
     // Migration auto si la donnée vient de l'ancien format (avant le Lot 1).
@@ -153,20 +266,71 @@ export default function BeneficiairesPage() {
     localStorage.setItem(S_BENEF, JSON.stringify(data))
   }
 
-  function openNew() { setEditing(null); setForm(empty()); setSlideOpen(true) }
-  function openEdit(b: Beneficiaire) { setEditing(b); setForm({ ...b }); setSlideOpen(true) }
+  /** Renvoie les ids des élèves rattachés à ce parent (lien porté côté élève). */
+  function getEnfantIds(parentId: number): number[] {
+    return beneficiaires
+      .filter(b => b.type === "eleve" && b.parentIds.includes(parentId))
+      .map(b => b.id)
+  }
+
+  function openNew() {
+    setEditing(null)
+    // Pré-sélectionne le type courant du hub.
+    setForm({ ...empty(), type })
+    setSelectedEnfantIds([])
+    setSlideOpen(true)
+  }
+  function openEdit(b: Beneficiaire) {
+    setEditing(b)
+    setForm({ ...b })
+    setSelectedEnfantIds(b.type === "parent" ? getEnfantIds(b.id) : [])
+    setSlideOpen(true)
+  }
 
   function handleSave() {
-    const updated = editing
-      ? beneficiaires.map(x => x.id === editing.id ? { ...form, id: editing.id } : x)
-      : [...beneficiaires, { ...form, id: Date.now() }]
+    const id = editing ? editing.id : Date.now()
+    const fiche: Beneficiaire = { ...form, id }
+    let updated = editing
+      ? beneficiaires.map(x => x.id === editing.id ? fiche : x)
+      : [...beneficiaires, fiche]
+
+    // Cascade du lien parent ↔ enfants quand on édite un parent. On compare
+    // l'état précédent (calculé) à l'état souhaité (selectedEnfantIds) et on
+    // met à jour les parentIds des élèves concernés.
+    if (form.type === "parent") {
+      const previousEnfantIds = editing ? getEnfantIds(editing.id) : []
+      const ajoutes = selectedEnfantIds.filter(eid => !previousEnfantIds.includes(eid))
+      const retires = previousEnfantIds.filter(eid => !selectedEnfantIds.includes(eid))
+
+      updated = updated.map(b => {
+        if (b.type !== "eleve") return b
+        if (ajoutes.includes(b.id) && !b.parentIds.includes(id)) {
+          return { ...b, parentIds: [...b.parentIds, id] }
+        }
+        if (retires.includes(b.id)) {
+          return { ...b, parentIds: b.parentIds.filter(p => p !== id) }
+        }
+        return b
+      })
+    }
+
     persist(updated)
     setSlideOpen(false)
   }
 
   function handleDelete() {
     if (!editing) return
-    persist(beneficiaires.filter(x => x.id !== editing.id))
+    // Si on supprime un parent, on nettoie les références dans les parentIds
+    // des élèves qui le pointaient.
+    const updated = beneficiaires
+      .filter(x => x.id !== editing.id)
+      .map(b => {
+        if (editing.type === "parent" && b.type === "eleve" && b.parentIds.includes(editing.id)) {
+          return { ...b, parentIds: b.parentIds.filter(p => p !== editing.id) }
+        }
+        return b
+      })
+    persist(updated)
     setSlideOpen(false)
   }
 
@@ -193,10 +357,30 @@ export default function BeneficiairesPage() {
     .filter(b => b.type === "parent")
     .sort((a, b) => a.nom.localeCompare(b.nom))
 
-  // Filters — la liste affichée n'inclut QUE les élèves (les parents ont leur
-  // propre page /parents). Les autres filtres s'appliquent ensuite.
+  // Pool des élèves — pour le multi-select "Enfants rattachés" dans le SlideOver
+  // d'édition d'un parent.
+  const elevesDisponibles = beneficiaires
+    .filter(b => b.type === "eleve")
+    .sort((a, b) => a.nom.localeCompare(b.nom))
+
+  // ── Counters pour les hub cards (calculés sur les données globales) ──
+  const hubCounts: Record<TypeBeneficiaire, { total: number; actifs: number; diplomes: number }> = {
+    eleve: {
+      total:    beneficiaires.filter(b => b.type === "eleve").length,
+      actifs:   beneficiaires.filter(b => b.type === "eleve" && b.statut === "actif").length,
+      diplomes: beneficiaires.filter(b => b.type === "eleve" && b.statut === "diplômé").length,
+    },
+    parent: {
+      total:    beneficiaires.filter(b => b.type === "parent").length,
+      actifs:   beneficiaires.filter(b => b.type === "parent" && b.statut === "actif").length,
+      diplomes: beneficiaires.filter(b => b.type === "parent" && b.statut === "diplômé").length,
+    },
+  }
+
+  // Filtre : on n'affiche que la population du hub sélectionné. Recherche +
+  // filtres statut/niveau s'appliquent ensuite.
   const filtered = beneficiaires.filter(b => {
-    if (b.type !== "eleve") return false
+    if (b.type !== type) return false
     const q = search.toLowerCase()
     const matchSearch = !q ||
       b.prenom.toLowerCase().includes(q) ||
@@ -216,7 +400,7 @@ export default function BeneficiairesPage() {
       <header className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Bénéficiaires</h1>
-          <p className="text-sm text-muted mt-1">Fiches d'inscription, contacts parents et suivi des ateliers</p>
+          <p className="text-sm text-muted mt-1">Fiches d'inscription, contacts et suivi des ateliers</p>
         </div>
         <button
           onClick={openNew}
@@ -226,18 +410,30 @@ export default function BeneficiairesPage() {
         </button>
       </header>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-ateliers-light rounded-xl border border-ateliers/20 p-4">
-          <p className="text-3xl font-bold text-ateliers-dark">{beneficiaires.filter(b => b.statut === "actif").length}</p>
-          <p className="text-sm text-ateliers-dark/70 mt-1">Actifs</p>
+      {/* Hub cards Élèves / Parents (Lot B) */}
+      <TypeBenefHubCards type={type} counts={hubCounts} onChange={setType} />
+
+      {/* Stats — audience-aware */}
+      <div
+        id={`benef-hub-panel-${type}`}
+        role="tabpanel"
+        aria-labelledby={`benef-hub-tab-${type}`}
+        className="grid grid-cols-3 gap-4 mb-6"
+      >
+        <div className={`rounded-xl border p-4 ${type === "parent" ? "bg-communication-light border-communication/20" : "bg-ateliers-light border-ateliers/20"}`}>
+          <p className={`text-3xl font-bold ${type === "parent" ? "text-communication-dark" : "text-ateliers-dark"}`}>
+            {hubCounts[type].actifs}
+          </p>
+          <p className={`text-sm mt-1 ${type === "parent" ? "text-communication-dark/70" : "text-ateliers-dark/70"}`}>
+            {type === "parent" ? "Parents actifs" : "Élèves actifs"}
+          </p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
-          <p className="text-3xl font-bold text-foreground">{beneficiaires.filter(b => b.statut === "diplômé").length}</p>
+          <p className="text-3xl font-bold text-foreground">{hubCounts[type].diplomes}</p>
           <p className="text-sm text-muted mt-1">Diplômés</p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
-          <p className="text-3xl font-bold text-foreground">{beneficiaires.length}</p>
+          <p className="text-3xl font-bold text-foreground">{hubCounts[type].total}</p>
           <p className="text-sm text-muted mt-1">Total</p>
         </div>
       </div>
@@ -310,19 +506,34 @@ export default function BeneficiairesPage() {
               const age         = computeAge(b.dateNaissance)
               const benGroups   = getGroupes(b.id)
               const { total, absences } = getSessionStats(b.id)
+              // Avatar + badge type couleur (ateliers/teal pour Élève, communication/doré pour Parent).
+              const isParent  = b.type === "parent"
+              const avatarBg  = isParent ? "bg-communication-light" : "bg-ateliers-light"
+              const avatarText = isParent ? "text-communication-dark" : "text-ateliers-dark"
+              const enfantsLies = isParent
+                ? beneficiaires.filter(x => x.type === "eleve" && x.parentIds.includes(b.id))
+                : []
 
               return (
                 <li key={b.id} className="px-5 py-4 flex items-start gap-4 hover:bg-slate-50 group">
                   {/* Avatar */}
-                  <div className="w-11 h-11 rounded-full bg-ateliers-light flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-sm font-bold text-ateliers-dark">{initials(b.prenom, b.nom)}</span>
+                  <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${avatarBg}`}>
+                    <span className={`text-sm font-bold ${avatarText}`}>{initials(b.prenom, b.nom)}</span>
                   </div>
 
                   {/* Main info */}
                   <div className="flex-1 min-w-0">
-                    {/* Nom + age + statut */}
+                    {/* Nom + badge type + age + statut */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-foreground">{b.prenom} {b.nom}</p>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        isParent
+                          ? "bg-communication-light text-communication-dark"
+                          : "bg-ateliers-light text-ateliers-dark"
+                      }`}>
+                        {isParent ? <UserCheck size={10} /> : <GraduationCap size={10} />}
+                        {isParent ? "Parent" : "Élève"}
+                      </span>
                       {age !== null && <span className="text-xs text-muted">{age} ans</span>}
                       <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statutStyle[b.statut]}`}>{b.statut}</span>
                     </div>
@@ -354,8 +565,8 @@ export default function BeneficiairesPage() {
                       </span>
                     </div>
 
-                    {/* Contact parent */}
-                    {(b.nomParent || b.telephoneParent) && (
+                    {/* Contact parent (élèves) OU Enfants rattachés (parents) */}
+                    {!isParent && (b.nomParent || b.telephoneParent) && (
                       <div className="flex items-center gap-2 mt-1.5 text-xs text-muted">
                         <span className="font-medium">{b.nomParent}</span>
                         {b.telephoneParent && (
@@ -366,6 +577,16 @@ export default function BeneficiairesPage() {
                             <Phone size={10} /> {b.telephoneParent}
                           </a>
                         )}
+                      </div>
+                    )}
+                    {isParent && enfantsLies.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <GraduationCap size={11} className="text-ateliers-dark" />
+                        {enfantsLies.map(e => (
+                          <span key={e.id} className="text-[10px] bg-ateliers-light text-ateliers-dark px-1.5 py-0.5 rounded-full">
+                            {e.prenom} {e.nom}
+                          </span>
+                        ))}
                       </div>
                     )}
 
@@ -412,6 +633,47 @@ export default function BeneficiairesPage() {
       >
         <form onSubmit={e => { e.preventDefault(); handleSave() }} className="flex flex-col gap-5">
 
+          {/* Section Type de bénéficiaire — sélecteur radio (Lot C) */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
+              Type de bénéficiaire <span className="text-alert">*</span>
+            </p>
+            <div role="radiogroup" aria-label="Type de bénéficiaire" className="grid grid-cols-2 gap-3">
+              {([
+                { id: "eleve" as const, label: "Élève", sublabel: "Enfant / adolescent", Icon: GraduationCap,
+                  bgActive: "bg-ateliers", textActive: "text-white", borderInactive: "border-ateliers/30", textInactive: "text-ateliers-dark", iconBg: "bg-ateliers-light", iconColor: "text-ateliers-dark" },
+                { id: "parent" as const, label: "Parent / Adulte", sublabel: "Adulte bénéficiaire", Icon: UserCheck,
+                  bgActive: "bg-communication", textActive: "text-white", borderInactive: "border-communication/30", textInactive: "text-communication-dark", iconBg: "bg-communication-light", iconColor: "text-communication-dark" },
+              ]).map(opt => {
+                const sel = form.type === opt.id
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={sel}
+                    onClick={() => setForm(f => ({ ...f, type: opt.id }))}
+                    className={`text-left rounded-xl p-3 transition-all border-2 ${
+                      sel
+                        ? `${opt.bgActive} ${opt.textActive} border-transparent shadow-sm`
+                        : `bg-surface ${opt.textInactive} ${opt.borderInactive} hover:shadow-sm`
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${sel ? "bg-white/20" : opt.iconBg}`} aria-hidden="true">
+                        <opt.Icon size={18} className={sel ? "text-white" : opt.iconColor} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold leading-tight">{opt.label}</p>
+                        <p className={`text-[11px] mt-0.5 ${sel ? "opacity-90" : "opacity-70"}`}>{opt.sublabel}</p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Section Identité */}
           <div>
             <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -445,77 +707,121 @@ export default function BeneficiairesPage() {
                 </div>
               </Field>
               <FormRow>
-                <Field label="Email (optionnel si enfant)">
-                  <Input type="email" placeholder="leila@email.fr" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                <Field label={form.type === "parent" ? "Email" : "Email (optionnel pour un enfant)"} required={form.type === "parent"}>
+                  <Input type="email" placeholder={form.type === "parent" ? "farida@email.fr" : "leila@email.fr"} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
                 </Field>
-                <Field label="Téléphone (optionnel si enfant)">
+                <Field label={form.type === "parent" ? "Téléphone" : "Téléphone (optionnel pour un enfant)"} required={form.type === "parent"}>
                   <Input placeholder="06 12 34 56 78" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))} />
                 </Field>
               </FormRow>
             </div>
           </div>
 
-          {/* Section Contact parent (info admin — peut différer du compte AREA) */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Phone size={12} /> Contact parent / tuteur
-            </p>
-            <div className="flex flex-col gap-3">
-              <Field label="Nom du parent / tuteur" required>
-                <Input placeholder="Farida A." value={form.nomParent} onChange={e => setForm(f => ({ ...f, nomParent: e.target.value }))} />
-              </Field>
-              <FormRow>
-                <Field label="Téléphone" required>
-                  <Input placeholder="06 11 22 33 44" value={form.telephoneParent} onChange={e => setForm(f => ({ ...f, telephoneParent: e.target.value }))} />
-                </Field>
-                <Field label="Email">
-                  <Input type="email" placeholder="farida@email.fr" value={form.emailParent} onChange={e => setForm(f => ({ ...f, emailParent: e.target.value }))} />
-                </Field>
-              </FormRow>
-            </div>
-          </div>
-
-          {/* Section Parents rattachés (lien vers comptes Parent enregistrés dans AREA) */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Users size={12} /> Parents rattachés (compte AREA)
-            </p>
-            <p className="text-[11px] text-muted mb-3">
-              Lien vers les parents enregistrés comme bénéficiaires AREA — utile pour
-              les ateliers adultes. Distinct du contact admin ci-dessus.
-            </p>
-            {parentsDisponibles.length === 0 ? (
-              <p className="text-[11px] text-muted italic">
-                Aucun parent enregistré. Ajoute des parents dans l&apos;onglet Parents
-                pour pouvoir les lier ici.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {parentsDisponibles.map(p => {
-                  const sel = form.parentIds.includes(p.id)
-                  return (
-                    <button
-                      type="button"
-                      key={p.id}
-                      onClick={() => setForm(f => ({
-                        ...f,
-                        parentIds: sel
-                          ? f.parentIds.filter(id => id !== p.id)
-                          : [...f.parentIds, p.id],
-                      }))}
-                      className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                        sel
-                          ? "bg-ateliers text-white border-ateliers"
-                          : "bg-surface text-muted border-border hover:border-ateliers"
-                      }`}
-                    >
-                      {p.prenom} {p.nom}
-                    </button>
-                  )
-                })}
+          {/* ── Sections spécifiques ÉLÈVE ── */}
+          {form.type === "eleve" && (
+            <>
+              {/* Contact parent (info admin — peut différer du compte AREA) */}
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <Phone size={12} /> Contact parent / tuteur
+                </p>
+                <div className="flex flex-col gap-3">
+                  <Field label="Nom du parent / tuteur" required>
+                    <Input placeholder="Farida A." value={form.nomParent} onChange={e => setForm(f => ({ ...f, nomParent: e.target.value }))} />
+                  </Field>
+                  <FormRow>
+                    <Field label="Téléphone" required>
+                      <Input placeholder="06 11 22 33 44" value={form.telephoneParent} onChange={e => setForm(f => ({ ...f, telephoneParent: e.target.value }))} />
+                    </Field>
+                    <Field label="Email">
+                      <Input type="email" placeholder="farida@email.fr" value={form.emailParent} onChange={e => setForm(f => ({ ...f, emailParent: e.target.value }))} />
+                    </Field>
+                  </FormRow>
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Parents rattachés (lien vers comptes Parent enregistrés dans AREA) */}
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Users size={12} /> Parents rattachés (compte AREA)
+                </p>
+                <p className="text-[11px] text-muted mb-3">
+                  Lien vers les parents enregistrés comme bénéficiaires AREA — utile pour
+                  les ateliers adultes. Distinct du contact ci-dessus.
+                </p>
+                {parentsDisponibles.length === 0 ? (
+                  <p className="text-[11px] text-muted italic">
+                    Aucun parent enregistré. Bascule sur le hub Parents pour en créer.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {parentsDisponibles.map(p => {
+                      const sel = form.parentIds.includes(p.id)
+                      return (
+                        <button
+                          type="button"
+                          key={p.id}
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            parentIds: sel
+                              ? f.parentIds.filter(id => id !== p.id)
+                              : [...f.parentIds, p.id],
+                          }))}
+                          className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                            sel
+                              ? "bg-ateliers text-white border-ateliers"
+                              : "bg-surface text-muted border-border hover:border-ateliers"
+                          }`}
+                        >
+                          {p.prenom} {p.nom}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Section spécifique PARENT — Enfants rattachés ── */}
+          {form.type === "parent" && (
+            <div>
+              <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <GraduationCap size={12} /> Enfants rattachés
+              </p>
+              <p className="text-[11px] text-muted mb-3">
+                Sélectionne les élèves dont cette personne est le parent.
+                La modification est propagée automatiquement aux fiches Élève.
+              </p>
+              {elevesDisponibles.length === 0 ? (
+                <p className="text-[11px] text-muted italic">
+                  Aucun élève enregistré. Bascule sur le hub Élèves pour en créer.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {elevesDisponibles.map(e => {
+                    const sel = selectedEnfantIds.includes(e.id)
+                    return (
+                      <button
+                        type="button"
+                        key={e.id}
+                        onClick={() => setSelectedEnfantIds(prev =>
+                          sel ? prev.filter(id => id !== e.id) : [...prev, e.id],
+                        )}
+                        className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                          sel
+                            ? "bg-ateliers text-white border-ateliers"
+                            : "bg-surface text-muted border-border hover:border-ateliers"
+                        }`}
+                      >
+                        {e.prenom} {e.nom}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Section Inscription */}
           <div>
