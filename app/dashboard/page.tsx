@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -57,9 +58,7 @@ export default function DashboardPage() {
       {/* En-tête : identité + déconnexion (repris de la sidebar, absente ici) */}
       <header className="flex flex-wrap items-center justify-between gap-4 mb-10">
         <div className="flex items-center gap-3">
-          <span className="bg-brand text-white rounded-xl p-2.5 shrink-0">
-            <Heart size={20} />
-          </span>
+          <Image src="/logo-area.png" alt="" width={40} height={40} className="rounded-xl shrink-0" />
           <div>
             <p className="text-sm text-muted capitalize">{todayFr()}</p>
             <h1 className="text-2xl font-bold text-foreground">Bonjour {user.prenom}</h1>
