@@ -666,7 +666,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               </Select>
             </Field>
           </FormRow>
-          <Field label="Niveau">
+          <Field label="Niveau scolaire">
             <Select value={String(reinscForm.Niveau ?? "")} onChange={e => setReinscForm(f => ({ ...f, Niveau: e.target.value }))}>
               <option value="">—</option>
               <ExtraOption value={String(reinscForm.Niveau ?? "")} list={NIVEAUX} />
@@ -770,7 +770,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               </Select>
             </Field>
           </FormRow>
-          <Field label="Niveau">
+          <Field label="Niveau scolaire">
             <Select value={inscForm.Niveau} onChange={e => setInscForm(f => ({ ...f, Niveau: e.target.value }))}>
               <option value="">—</option>
               <ExtraOption value={inscForm.Niveau} list={NIVEAUX} />
