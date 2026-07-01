@@ -446,6 +446,114 @@ function SelecteurBeneficiaires({
   )
 }
 
+/** Même sélecteur compact que SelecteurBeneficiaires, adapté aux intervenants
+ *  (table INTERVENANT du Sheet). Utilisé dans le formulaire de création d'atelier,
+ *  identique pour l'onglet Parents et l'onglet Enfants (le champ ne dépend pas
+ *  de l'audience). */
+function SelecteurIntervenants({
+  options, selectedIds, onToggle, placeholder,
+}: {
+  options: IntervenantSheet[]
+  selectedIds: number[]
+  onToggle: (id: number) => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const q = search.trim().toLowerCase()
+  const withId = options.map(iv => ({ ...iv, id: Number(iv.ID_Intervenant) }))
+  const filtered = withId.filter(iv => !q || `${iv.Prenom} ${iv.Nom}`.toLowerCase().includes(q))
+  const selected = withId.filter(iv => selectedIds.includes(iv.id))
+  const allFilteredSelected = filtered.length > 0 && filtered.every(iv => selectedIds.includes(iv.id))
+
+  function toggleAllFiltered() {
+    filtered.forEach(iv => {
+      const isSel = selectedIds.includes(iv.id)
+      if (allFilteredSelected && isSel) onToggle(iv.id)
+      else if (!allFilteredSelected && !isSel) onToggle(iv.id)
+    })
+  }
+
+  return (
+    <div>
+      {/* Champ compact */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border border-border bg-surface hover:border-benevoles transition-colors"
+      >
+        <span className={selected.length ? "text-foreground" : "text-muted"}>
+          {selected.length
+            ? `${selected.length} intervenant${selected.length > 1 ? "s" : ""} sélectionné${selected.length > 1 ? "s" : ""}`
+            : (placeholder ?? "Sélectionner des intervenants…")}
+        </span>
+        <ChevronDown size={14} className={`text-muted transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {/* Puces des sélectionnés */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selected.map(iv => (
+            <span key={iv.ID_Intervenant} className="text-[11px] bg-benevoles-light text-benevoles-dark rounded-full pl-2.5 pr-1 py-0.5 flex items-center gap-1">
+              {iv.Prenom} {iv.Nom}
+              <button type="button" onClick={() => onToggle(iv.id)} className="hover:text-red-600" aria-label={`Retirer ${iv.Prenom} ${iv.Nom}`}>
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Panneau déroulant */}
+      {open && (
+        <div className="mt-2 rounded-xl border border-border bg-surface shadow-sm">
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher un nom…"
+                className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-benevoles/30"
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="text-[11px] text-muted italic text-center py-4">Aucun intervenant.</p>
+            ) : filtered.map(iv => {
+              const sel = selectedIds.includes(iv.id)
+              return (
+                <button
+                  type="button"
+                  key={iv.ID_Intervenant}
+                  onClick={() => onToggle(iv.id)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50 text-left"
+                >
+                  <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${sel ? "bg-benevoles border-benevoles" : "border-border bg-surface"}`}>
+                    {sel && <Check size={11} className="text-white" />}
+                  </span>
+                  <span className="font-medium text-foreground">{iv.Prenom} {iv.Nom}</span>
+                  <span className="ml-auto text-[10px] text-muted">{iv.Type || "—"}</span>
+                </button>
+              )
+            })}
+          </div>
+          {filtered.length > 0 && (
+            <div className="p-2 border-t border-border flex items-center justify-between">
+              <button type="button" onClick={toggleAllFiltered} className="text-[11px] font-medium text-benevoles-dark hover:underline">
+                {allFilteredSelected ? "Tout désélectionner" : "Tout sélectionner"}{q && " (filtré)"}
+              </button>
+              <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-muted hover:text-foreground">Fermer</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ──────────────────────────────────────────────
 // Helpers visuels
 // ──────────────────────────────────────────────
@@ -1914,34 +2022,23 @@ export default function AteliersPage() {
             </div>
           </div>
 
-          {/* Intervenants / animateurs — multi-select (table INTERVENANT du Sheet).
-              Remplace les anciennes sections « Bénévoles » et « Personnes impliquées ». */}
+          {/* Intervenants / animateurs — sélecteur compact recherchable (table INTERVENANT
+              du Sheet). Remplace les anciennes sections « Bénévoles » et « Personnes
+              impliquées ». Champ commun aux deux audiences (onglet Parents / onglet Enfants) :
+              il n'est pas conditionné par sessionForm.audience. */}
           <Field label="Intervenants / animateurs">
-            <div className="flex flex-wrap gap-2">
-              {intervenants.length === 0 ? (
-                <p className="text-[11px] text-muted italic">
-                  Aucun intervenant enregistré. Ajoute-les dans l&apos;onglet INTERVENANT du Google Sheet.
-                </p>
-              ) : intervenants.map(iv => {
-                const id = Number(iv.ID_Intervenant)
-                const sel = sessionForm.intervenantIds.includes(id)
-                return (
-                  <button
-                    type="button"
-                    key={iv.ID_Intervenant}
-                    onClick={() => toggleIntervenantInSession(id)}
-                    className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                      sel
-                        ? "bg-benevoles text-white border-benevoles"
-                        : "bg-surface text-muted border-border hover:border-benevoles"
-                    }`}
-                  >
-                    {iv.Prenom} {iv.Nom}
-                    {iv.Type && <span className="ml-1 opacity-60">· {iv.Type}</span>}
-                  </button>
-                )
-              })}
-            </div>
+            {intervenants.length === 0 ? (
+              <p className="text-[11px] text-muted italic">
+                Aucun intervenant enregistré. Ajoute-les dans l&apos;onglet INTERVENANT du Google Sheet.
+              </p>
+            ) : (
+              <SelecteurIntervenants
+                options={intervenants}
+                selectedIds={sessionForm.intervenantIds}
+                onToggle={toggleIntervenantInSession}
+                placeholder="Sélectionner des intervenants…"
+              />
+            )}
           </Field>
 
           {/* Élèves — UNIQUEMENT pour théâtre / marionnettes : sélection manuelle
