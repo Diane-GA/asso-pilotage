@@ -185,6 +185,10 @@ export async function deletePaiement(idPaiement: string): Promise<{ ok: boolean 
   return apiPost({ action: "deletePaiement", idPaiement }) as Promise<{ ok: boolean }>
 }
 
+export async function addInscription(idMembre: string, data: Partial<InscriptionSheet>): Promise<{ ok: boolean, ID_Inscription: string }> {
+  return apiPost({ action: "addInscription", idMembre, data }) as Promise<{ ok: boolean, ID_Inscription: string }>
+}
+
 export async function updateInscription(idInscription: string, data: Partial<InscriptionSheet>): Promise<{ ok: boolean }> {
   return apiPost({ action: "updateInscription", idInscription, data }) as Promise<{ ok: boolean }>
 }

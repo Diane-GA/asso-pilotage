@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
       case "addPaiement":     return ok(await addPaiement(sheets, body.data))
       case "updatePaiement":  return ok(await updatePaiement(sheets, body.idPaiement, body.data))
       case "deletePaiement":  return ok(await deletePaiement(sheets, body.idPaiement))
+      case "addInscription":    return ok(await addInscription(sheets, String(body.idMembre), body.data as Record<string, unknown>))
       case "updateInscription": return ok(await updateInscription(sheets, body.idInscription, body.data))
       case "addEvenement":    return ok(await addEvenement(sheets, body.data))
       case "updateEvenement": return ok(await updateEvenement(sheets, body.idEvenement, body.data))
@@ -462,6 +463,26 @@ async function deletePaiement(sheets: Sheets, idPaiement: string) {
 }
 
 // ── ÉCRITURE INSCRIPTION ──────────────────────────────────
+
+async function addInscription(sheets: Sheets, idMembre: string, data: Record<string, unknown>) {
+  const inscId = await nextId(sheets, "INSCRIPTION")
+  await appendRow(sheets, "INSCRIPTION", {
+    "ID": inscId,
+    "Personne ID": idMembre,
+    "Annee scolaire": data.Annee_Scolaire ?? "",
+    "Type apprenant": data.Type_Apprenant ?? "",
+    "Statut": "EN COURS",
+    "Niveau / Classe": data.Niveau ?? "",
+    "Disponibilite": data.Disponibilite ?? "",
+    "Orientation": data.Orientation ?? "",
+    "Beneficiaire": data.Beneficiaire ?? "",
+    "Date d'inscription": new Date().toISOString().split("T")[0],
+    "Montant adhesion": data.Montant_Adhesion ?? "",
+    "Montant d'inscription": data.Montant_Inscription ?? 30,
+    "Remarques": data.Remarques ?? "",
+  })
+  return { ok: true, ID_Inscription: String(inscId) }
+}
 
 async function updateInscription(sheets: Sheets, idInscription: string, data: Record<string, unknown>) {
   const map: Record<string, unknown> = {}

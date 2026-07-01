@@ -8,7 +8,7 @@ import JournalSuivi from "@/components/JournalSuivi"
 import { ChevronRight, Phone, Mail, Globe, Plus, Pencil, Upload, FileText, ExternalLink, X } from "lucide-react"
 import {
   fetchFamilles, fetchMembre, updateMembre, deleteMembre, fetchPaiements,
-  addPaiement, updatePaiement, deletePaiement, updateInscription, uploadFichier,
+  addPaiement, updatePaiement, deletePaiement, addInscription, updateInscription, uploadFichier,
   fetchDocuments, deleteDocument,
   calculerAge, type FamilleSheet, type MembreSheet, type PaiementSheet, type InscriptionSheet, type DocumentJoint
 } from "@/lib/sheets-api"
@@ -45,6 +45,24 @@ const statutStyle: Record<string, string> = {
   "ARRETE":   "bg-absences-light text-absences-dark",
   "TERMINÉ":  "bg-slate-100 text-slate-600",
   "TERMINE":  "bg-slate-100 text-slate-600",
+}
+
+function getCurrentAnneeScolaire(): string {
+  const now = new Date()
+  const baseYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
+  const y1 = String(baseYear % 100).padStart(2, "0")
+  const y2 = String((baseYear + 1) % 100).padStart(2, "0")
+  return `${y1}-${y2}`
+}
+
+function getAnneeScolaireOptions(): string[] {
+  const now = new Date()
+  const baseYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
+  return [-1, 0, 1].map(offset => {
+    const y1 = String((baseYear + offset) % 100).padStart(2, "0")
+    const y2 = String((baseYear + offset + 1) % 100).padStart(2, "0")
+    return `${y1}-${y2}`
+  })
 }
 
 function parseAnneeScolaireEnd(annee: string): Date | null {
@@ -86,6 +104,8 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
     Disponibilite: "", Orientation: "",
     Montant_Adhesion: "", Montant_Inscription: "",
   })
+  const [reinscOpen, setReinscOpen] = useState(false)
+  const [reinscForm, setReinscForm] = useState<Partial<InscriptionSheet>>({})
   const [finOpen, setFinOpen] = useState(false)
   const [finInsc, setFinInsc] = useState<InscriptionSheet | null>(null)
   const [finForm, setFinForm] = useState({ Statut: "", Remarques: "" })
@@ -203,6 +223,29 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
     })
     await loadData()
     setInscOpen(false)
+  }
+
+  function openReinscription() {
+    const derniere = [...inscriptions].sort((a, b) =>
+      String(b.Annee_Scolaire).localeCompare(String(a.Annee_Scolaire))
+    )[0]
+    setReinscForm({
+      Annee_Scolaire:      getCurrentAnneeScolaire(),
+      Type_Apprenant:      derniere?.Type_Apprenant ?? "",
+      Niveau:              derniere?.Niveau ?? "",
+      Disponibilite:       derniere?.Disponibilite ?? "",
+      Orientation:         derniere?.Orientation ?? "",
+      Beneficiaire:        derniere?.Beneficiaire ?? "",
+      Montant_Adhesion:    derniere?.Montant_Adhesion ?? "",
+      Montant_Inscription: derniere?.Montant_Inscription ?? "30",
+    })
+    setReinscOpen(true)
+  }
+
+  async function handleSaveReinscription() {
+    await addInscription(membreId, reinscForm)
+    await loadData()
+    setReinscOpen(false)
   }
 
   async function handleSaveFin() {
@@ -402,10 +445,16 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
 
       {/* Inscriptions */}
       <div className="bg-surface border border-border rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-semibold text-foreground mb-3">
-          Inscriptions
-          {inscriptions.length > 0 && <span className="ml-2 text-xs font-normal text-muted">({inscriptions.length})</span>}
-        </h2>
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <h2 className="text-sm font-semibold text-foreground">
+            Inscriptions
+            {inscriptions.length > 0 && <span className="ml-2 text-xs font-normal text-muted">({inscriptions.length})</span>}
+          </h2>
+          <button onClick={openReinscription}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-familles text-white text-xs font-medium hover:bg-familles-dark transition-colors">
+            <Plus size={13} /> Réinscription
+          </button>
+        </div>
         {inscriptions.length === 0 ? (
           <p className="text-sm text-muted italic">Aucune inscription enregistrée.</p>
         ) : (
@@ -585,6 +634,57 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
           </Field>
           <SaveButton />
           {payEditing && <DeleteButton onClick={handleDeletePaiement} />}
+        </form>
+      </SlideOver>
+
+      {/* SlideOver réinscription */}
+      <SlideOver open={reinscOpen} onClose={() => setReinscOpen(false)} title="Réinscription" width="md">
+        <form onSubmit={e => { e.preventDefault(); handleSaveReinscription() }} className="flex flex-col gap-4">
+          <FormRow>
+            <Field label="Année scolaire" required>
+              <Select value={String(reinscForm.Annee_Scolaire ?? "")} onChange={e => setReinscForm(f => ({ ...f, Annee_Scolaire: e.target.value }))}>
+                {getAnneeScolaireOptions().map(y => <option key={y} value={y}>{y}</option>)}
+              </Select>
+            </Field>
+            <Field label="Type d'apprenant">
+              <Select value={String(reinscForm.Type_Apprenant ?? "")} onChange={e => setReinscForm(f => ({ ...f, Type_Apprenant: e.target.value }))}>
+                <option value="">—</option>
+                <option value="Adulte">Adulte</option>
+                <option value="Enfant">Enfant</option>
+              </Select>
+            </Field>
+          </FormRow>
+          <Field label="Niveau">
+            <Select value={String(reinscForm.Niveau ?? "")} onChange={e => setReinscForm(f => ({ ...f, Niveau: e.target.value }))}>
+              <option value="">—</option>
+              <option value="Alpha">Alpha</option>
+              <option value="A1-">A1-</option>
+              <option value="A1+">A1+</option>
+              <option value="A2-">A2-</option>
+              <option value="A2+/B1">A2+/B1</option>
+            </Select>
+          </Field>
+          <Field label="Disponibilités">
+            <Input value={String(reinscForm.Disponibilite ?? "")} onChange={e => setReinscForm(f => ({ ...f, Disponibilite: e.target.value }))} placeholder="ex. Lundi matin, Mercredi" />
+          </Field>
+          <Field label="Orientation">
+            <Input value={String(reinscForm.Orientation ?? "")} onChange={e => setReinscForm(f => ({ ...f, Orientation: e.target.value }))} placeholder="ex. CAF, CPAM…" />
+          </Field>
+          <FormRow>
+            <Field label="Montant d'adhésion (€)">
+              <Input type="number" value={String(reinscForm.Montant_Adhesion ?? "")} onChange={e => setReinscForm(f => ({ ...f, Montant_Adhesion: e.target.value }))} placeholder="0" />
+            </Field>
+            <Field label="Montant d'inscription (€)">
+              <Input type="number" value={String(reinscForm.Montant_Inscription ?? "30")} onChange={e => setReinscForm(f => ({ ...f, Montant_Inscription: e.target.value }))} placeholder="30" />
+            </Field>
+          </FormRow>
+          <div className="px-3 py-2.5 rounded-xl bg-slate-50 border border-border text-sm text-muted">
+            Total dû :{" "}
+            <span className="font-semibold text-foreground">
+              {(Number(reinscForm.Montant_Adhesion) || 0) + (Number(reinscForm.Montant_Inscription) || 0)} €
+            </span>
+          </div>
+          <SaveButton />
         </form>
       </SlideOver>
 
