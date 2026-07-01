@@ -71,6 +71,13 @@ const categories: DocCategory[] = [
         badgeColor: "bg-finances-light text-finances-dark",
         description: "Déploiement automatique via GitHub, checklist avant push, rollback et variables d'environnement.",
       },
+      {
+        href: "/docs/how-to/migration",
+        label: "Migrer vers l'association",
+        badge: "How-to",
+        badgeColor: "bg-finances-light text-finances-dark",
+        description: "Passation : transférer GitHub, Vercel, Google (compte de service + Sheet/Drive) et Anthropic vers les comptes de l'asso.",
+      },
     ],
   },
   {
@@ -128,7 +135,7 @@ const categories: DocCategory[] = [
         label: "ADR 004 — Google Sheets",
         badge: "ADR",
         badgeColor: "bg-slate-100 text-slate-600",
-        description: "Options d'intégration : Apps Script, Supabase ou export/import CSV — décision en 3 phases.",
+        description: "Intégration Google Sheets — API REST v4 côté serveur (compte de service) retenue, implémentée pour le module Familles.",
       },
     ],
   },

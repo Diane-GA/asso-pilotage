@@ -44,13 +44,15 @@ npm run build             # build local optionnel (prend ~30s)`}</pre>
       <section className="space-y-4">
         <h2 className="text-xl font-bold text-foreground mt-2">Variables d&apos;environnement</h2>
         <p className="text-sm text-muted leading-relaxed">
-          Actuellement le projet <strong>n&apos;a pas de variables d&apos;environnement</strong> (pas de backend, pas de clés API).
+          À définir dans Vercel (Settings → Environment Variables) <strong>et</strong> en local dans <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">.env.local</code> :
         </p>
-        <p className="text-sm text-muted leading-relaxed">Si tu en ajoutes :</p>
+        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`GOOGLE_CLIENT_EMAIL=...      # module Familles (compte de service)
+GOOGLE_PRIVATE_KEY=...       # module Familles (compte de service)
+ANTHROPIC_API_KEY=...        # génération IA (module Communication)`}</pre>
         <ol className="list-decimal list-inside text-sm text-muted space-y-1">
           <li>Ne jamais les committer dans le repo</li>
-          <li>Les ajouter dans Vercel : Settings → Environment Variables</li>
-          <li>Les préfixer <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">NEXT_PUBLIC_</code> si elles doivent être accessibles côté client</li>
+          <li>Le compte de service Google doit avoir accès <strong>Éditeur</strong> au Sheet <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">BDD_Asso_CRM</code> et aux dossiers Drive</li>
+          <li>Pour transférer ces comptes à l&apos;association, voir <strong>How-to → Migration asso</strong></li>
         </ol>
       </section>
 

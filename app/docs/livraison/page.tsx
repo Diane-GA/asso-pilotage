@@ -302,7 +302,7 @@ export default function LivraisonPage() {
         <ul className="text-sm text-muted space-y-1 leading-relaxed">
           {[
             "Export / Import CSV bénéficiaires et présences",
-            "Synchronisation Google Sheets via Apps Script",
+            "Étendre l'intégration Google Sheets aux autres modules (déjà en place pour Familles, API REST v4)",
             "Base de données Supabase partagée (multi-utilisateurs)",
             "Authentification renforcée (2FA)",
             "Publication directe réseaux sociaux (sans Zapier)",

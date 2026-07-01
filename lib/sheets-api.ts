@@ -28,6 +28,7 @@ export interface MembreSheet {
   Niveau: string
   Type_Apprenant?: string
   Source_Orientation: string
+  Date_Inscription?: string
   Nb_Enfants: number | string
   Notes: string
 }
@@ -186,6 +187,31 @@ export async function deletePaiement(idPaiement: string): Promise<{ ok: boolean 
 
 export async function updateInscription(idInscription: string, data: Partial<InscriptionSheet>): Promise<{ ok: boolean }> {
   return apiPost({ action: "updateInscription", idInscription, data }) as Promise<{ ok: boolean }>
+}
+
+// ── Upload de fichier (Drive) ───────────────────
+export async function uploadFichier(data: {
+  idMembre?: string
+  categorie?: string
+  nom: string
+  mimeType: string
+  dataBase64: string
+}): Promise<{ ok: boolean; url: string; fileId: string }> {
+  return apiPost({ action: "uploadFichier", ...data }) as Promise<{ ok: boolean; url: string; fileId: string }>
+}
+
+export interface DocumentJoint {
+  ID_Doc: string
+  URL: string
+  Categorie: string
+}
+
+export async function fetchDocuments(idMembre: string): Promise<DocumentJoint[]> {
+  return apiGet("getDocuments", { idMembre }) as Promise<DocumentJoint[]>
+}
+
+export async function deleteDocument(idDoc: string): Promise<{ ok: boolean }> {
+  return apiPost({ action: "deleteDocument", idDoc }) as Promise<{ ok: boolean }>
 }
 
 // ── Indicateur de configuration ────────────────

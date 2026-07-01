@@ -5,12 +5,57 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import SlideOver, { Field, Input, Select, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
 import JournalSuivi from "@/components/JournalSuivi"
-import { ChevronRight, Phone, Mail, Globe, Plus, Pencil } from "lucide-react"
+import DateInput from "@/components/DateInput"
+import { ChevronRight, Plus, Pencil, Upload, FileText, ExternalLink, X } from "lucide-react"
 import {
   fetchFamilles, fetchMembre, updateMembre, deleteMembre, fetchPaiements,
-  addPaiement, updatePaiement, deletePaiement, updateInscription,
-  calculerAge, type FamilleSheet, type MembreSheet, type PaiementSheet, type InscriptionSheet
+  addPaiement, updatePaiement, deletePaiement, updateInscription, uploadFichier,
+  fetchDocuments, deleteDocument,
+  type FamilleSheet, type MembreSheet, type PaiementSheet, type InscriptionSheet, type DocumentJoint
 } from "@/lib/sheets-api"
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "")
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+// Extrait jour/mois/année d'une date au format ISO (AAAA-MM-JJ) ou FR (JJ/MM/AAAA)
+function partsDate(v?: string | null): { d: number; m: number; y: number } | null {
+  if (!v) return null
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v))
+  if (iso) return { y: +iso[1], m: +iso[2], d: +iso[3] }
+  const fr = String(v).split("/")
+  if (fr.length === 3) { const d = +fr[0], m = +fr[1], y = +fr[2]; if (d && m && y) return { d, m, y } }
+  return null
+}
+
+function dateFrLisible(v?: string | null): string {
+  const p = partsDate(v)
+  if (!p) return v ? String(v) : ""
+  return `${String(p.d).padStart(2, "0")}/${String(p.m).padStart(2, "0")}/${p.y}`
+}
+
+function ageDepuis(v?: string | null): number | null {
+  const p = partsDate(v)
+  if (!p) return null
+  const t = new Date()
+  let age = t.getFullYear() - p.y
+  const mm = t.getMonth() - (p.m - 1)
+  if (mm < 0 || (mm === 0 && t.getDate() < p.d)) age--
+  return age >= 0 ? age : null
+}
+
+// Types de documents (chacun rangé dans son dossier Drive — mapping à venir)
+const TYPES_DOCUMENT = [
+  "Fiche d'inscription",
+  "Droit à l'image",
+  "Charte d'engagement",
+  "Autorisation de sortie",
+]
 
 const niveauStyle: Record<string, string> = {
   "Alpha":  "bg-slate-100 text-slate-600",
@@ -45,6 +90,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
   const [membre, setMembre]     = useState<MembreSheet | null>(null)
   const [paiements, setPaiements] = useState<PaiementSheet[]>([])
   const [inscriptions, setInscriptions] = useState<InscriptionSheet[]>([])
+  const [documents, setDocuments] = useState<DocumentJoint[]>([])
   const [loading, setLoading]   = useState(true)
   const [slideOpen, setSlideOpen] = useState(false)
   const [form, setForm]         = useState<Partial<MembreSheet>>({})
@@ -53,19 +99,25 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
   const [payForm, setPayForm]   = useState<Partial<PaiementSheet>>({})
   const [editAttenduId, setEditAttenduId] = useState<string | null>(null)
   const [attenduDraft, setAttenduDraft] = useState("")
+  const [docOpen, setDocOpen]   = useState(false)
+  const [docType, setDocType]   = useState("")
+  const [docFile, setDocFile]   = useState<File | null>(null)
+  const [docSaving, setDocSaving] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
-      const [familles, m, p] = await Promise.all([
+      const [familles, m, p, docs] = await Promise.all([
         fetchFamilles(),
         fetchMembre(membreId),
         fetchPaiements(membreId),
+        fetchDocuments(membreId),
       ])
       setFamille(familles.find(f => f.ID_Famille === id) ?? null)
       setMembre(m)
       setForm(m)
       setPaiements(p)
       setInscriptions(m.inscriptions ?? [])
+      setDocuments(docs)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [id, membreId])
@@ -130,13 +182,55 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
     setEditAttenduId(null)
   }
 
+  function openDocument() {
+    setDocType("")
+    setDocFile(null)
+    setDocOpen(true)
+  }
+
+  async function handleValiderDocument() {
+    if (!docType || !docFile) return
+    setDocSaving(true)
+    try {
+      const dataBase64 = await fileToBase64(docFile)
+      await uploadFichier({ idMembre: membreId, categorie: docType, nom: docFile.name, mimeType: docFile.type, dataBase64 })
+      await loadData()
+      setDocOpen(false)
+    } catch (e) { console.error("Upload du document échoué", e) }
+    finally { setDocSaving(false) }
+  }
+
+  async function handleDeleteDocument(idDoc: string) {
+    if (!confirm("Supprimer ce document ?")) return
+    await deleteDocument(idDoc)
+    await loadData()
+  }
+
   async function handleDelete() {
     await deleteMembre(membreId)
     router.push(`/familles/${id}`)
   }
 
   const statut = membre.Statut_Inscription?.toString().toUpperCase() ?? ""
-  const age = membre.Date_Naissance ? calculerAge(String(membre.Date_Naissance)) : null
+  const age = ageDepuis(membre.Date_Naissance)
+
+  // Champs de la carte infos (ordre logique ; seuls les renseignés s'affichent)
+  const naissance = dateFrLisible(membre.Date_Naissance)
+  const champsInfos: { label: string; value: string }[] = [
+    { label: "Téléphone", value: String(membre.Telephone || "") },
+    { label: "WhatsApp", value: membre.WhatsApp && membre.WhatsApp !== membre.Telephone ? String(membre.WhatsApp) : "" },
+    { label: "Email", value: String(membre.Email || "") },
+    { label: "Date de naissance", value: naissance ? (age !== null ? `${naissance} · ${age} ans` : naissance) : "" },
+    { label: "Genre", value: String(membre.Genre || "") },
+    { label: "Pays d'origine", value: String(membre.Pays_Origine || "") },
+    { label: "Langue maternelle", value: String(membre.Langue_Maternelle || "") },
+    { label: "Nb. enfants accompagnants", value: membre.Nb_Enfants ? String(membre.Nb_Enfants) : "" },
+    { label: "Adresse", value: String(famille?.Adresse_Complete || famille?.Adresse || "") },
+    { label: "Contact principal", value: membre.Contact_Principal ? String(membre.Contact_Principal) : "" },
+    { label: "Source d'orientation", value: String(membre.Source_Orientation || "") },
+    { label: "Droit à l'image", value: membre.Droit_Image ? String(membre.Droit_Image) : "" },
+    { label: "Charte d'engagement", value: membre.Charte ? String(membre.Charte) : "" },
+  ].filter(c => c.value !== "")
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -172,57 +266,84 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
           </div>
           <h1 className="text-2xl font-bold text-foreground">{membre.Prenom} {membre.Nom}</h1>
         </div>
-        <button
-          onClick={() => { setForm({ ...membre }); setSlideOpen(true) }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-familles-light text-familles-dark text-sm font-medium hover:bg-familles hover:text-white transition-colors shrink-0"
-        >
-          Modifier
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={openDocument}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-familles text-white text-sm font-medium hover:bg-familles-dark transition-colors"
+          >
+            <Upload size={15} />
+            Ajouter un document
+          </button>
+          <button
+            onClick={() => { setForm({ ...membre }); setSlideOpen(true) }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-familles-light text-familles-dark text-sm font-medium hover:bg-familles hover:text-white transition-colors"
+          >
+            Modifier
+          </button>
+        </div>
       </div>
+
+      {/* Popup ajout de document */}
+      <SlideOver open={docOpen} onClose={() => setDocOpen(false)} title="Ajouter un document" width="md">
+        <form onSubmit={e => { e.preventDefault(); handleValiderDocument() }} className="flex flex-col gap-4">
+          <Field label="Type de document" required>
+            <Select value={docType} onChange={e => setDocType(e.target.value)}>
+              <option value="">— Choisir —</option>
+              {TYPES_DOCUMENT.map(t => <option key={t} value={t}>{t}</option>)}
+            </Select>
+          </Field>
+          <Field label="Fichier" required>
+            <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-surface text-sm text-muted cursor-pointer hover:border-familles transition-colors w-fit">
+              <Upload size={15} />
+              {docFile ? "Changer de fichier" : "Choisir un fichier"}
+              <input type="file" className="hidden" onChange={e => setDocFile(e.target.files?.[0] ?? null)} />
+            </label>
+            {docFile && <p className="text-xs text-muted mt-1.5">{docFile.name}</p>}
+          </Field>
+          <button
+            type="submit"
+            disabled={!docType || !docFile || docSaving}
+            className="w-full px-4 py-2.5 rounded-xl bg-familles text-white text-sm font-medium hover:bg-familles-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {docSaving ? "Envoi…" : "Valider"}
+          </button>
+        </form>
+      </SlideOver>
 
       {/* Carte infos */}
-      <div className="bg-surface border border-border rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
-
-        {(membre.Telephone || membre.WhatsApp) && (
-          <div className="flex items-start gap-2">
-            <Phone size={15} className="text-muted mt-0.5 shrink-0" />
-            <div className="space-y-2">
-              <InfoRow label="Téléphone" value={String(membre.Telephone || "")} />
-              {membre.WhatsApp && membre.WhatsApp !== membre.Telephone && (
-                <InfoRow label="WhatsApp" value={String(membre.WhatsApp)} />
-              )}
-            </div>
-          </div>
-        )}
-
-        {membre.Email && (
-          <div className="flex items-start gap-2">
-            <Mail size={15} className="text-muted mt-0.5 shrink-0" />
-            <InfoRow label="Email" value={String(membre.Email)} />
-          </div>
-        )}
-
-        {(membre.Pays_Origine || membre.Langue_Maternelle) && (
-          <div className="flex items-start gap-2">
-            <Globe size={15} className="text-muted mt-0.5 shrink-0" />
-            <div className="space-y-2">
-              <InfoRow label="Pays d'origine" value={String(membre.Pays_Origine || "")} />
-              <InfoRow label="Langue maternelle" value={String(membre.Langue_Maternelle || "")} />
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <InfoRow label="Genre" value={String(membre.Genre || "")} />
-          <InfoRow label="Date de naissance" value={String(membre.Date_Naissance || "")} />
-          {age !== null && <InfoRow label="Âge" value={`${age} ans`} />}
-          <InfoRow label="Nb. enfants accompagnants" value={membre.Nb_Enfants ? String(membre.Nb_Enfants) : null} />
-        </div>
-
-        <div className="space-y-2">
-          <InfoRow label="Source d'orientation" value={String(membre.Source_Orientation || "")} />
+      <div className="bg-surface border border-border rounded-xl p-5 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+          {champsInfos.map(c => (
+            <InfoRow key={c.label} label={c.label} value={c.value} />
+          ))}
         </div>
       </div>
+
+      {/* Documents — affiché uniquement s'il y en a */}
+      {documents.length > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-5 mb-6">
+          <h2 className="text-sm font-semibold text-foreground mb-3">
+            Documents
+            <span className="ml-2 text-xs font-normal text-muted">({documents.length})</span>
+          </h2>
+          <ul className="space-y-2">
+            {documents.map(doc => (
+              <li key={doc.ID_Doc} className="flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-4 py-2.5">
+                <a href={doc.URL} target="_blank" rel="noopener noreferrer"
+                   className="flex items-center gap-2 min-w-0 text-sm text-familles-dark hover:underline">
+                  <FileText size={15} className="shrink-0" />
+                  <span className="truncate">{doc.Categorie || "Document"}</span>
+                  <ExternalLink size={13} className="shrink-0 text-muted" />
+                </a>
+                <button onClick={() => handleDeleteDocument(doc.ID_Doc)} aria-label="Supprimer ce document" title="Supprimer"
+                  className="shrink-0 p-1 rounded text-muted hover:text-absences-dark hover:bg-absences-light transition-colors">
+                  <X size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Journal : commentaires + appels + emails */}
       <JournalSuivi notes={membre.Notes} onSave={handleSaveNotes} />
@@ -264,8 +385,6 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1.5 text-xs text-muted flex-wrap">
-                    <span>Payé <span className="font-medium text-foreground">{paye} €</span></span>
-                    <span>·</span>
                     {enEdition ? (
                       <span className="flex items-center gap-1.5">
                         Attendu
@@ -292,11 +411,8 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
           </div>
         )}
 
-        {paiements.length === 0 ? (
-          <p className="text-sm text-muted italic">
-            {inscriptions.length > 0 ? "Aucun paiement. Cliquez sur « Paiement » pour en ajouter un." : "Aucune inscription : impossible d'ajouter un paiement."}
-          </p>
-        ) : (
+        {/* Liste des paiements (modifiable) */}
+        {paiements.length > 0 && (
           <div className="space-y-2">
             {paiements.map(p => (
               <div key={p.ID_Paiement} className="flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-4 py-3">
@@ -311,12 +427,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                   )}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-foreground">{p.Date_Paiement || "—"}</p>
-                    {p.Date_Virement && (
-                      <p className="text-xs text-muted">Virement {p.Date_Virement}</p>
-                    )}
-                  </div>
+                  <p className="text-sm font-medium text-foreground">{p.Date_Paiement || "—"}</p>
                   <button onClick={() => openEditPaiement(p)} aria-label="Modifier ce paiement" title="Modifier"
                     className="p-1.5 rounded-lg text-muted hover:text-familles-dark hover:bg-familles-light transition-colors">
                     <Pencil size={14} />
@@ -325,6 +436,10 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               </div>
             ))}
           </div>
+        )}
+
+        {inscriptions.length === 0 && (
+          <p className="text-sm text-muted italic">Aucune inscription : impossible d'ajouter un paiement.</p>
         )}
       </div>
 
@@ -345,7 +460,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               <Input type="number" value={String(payForm.Montant ?? "")} onChange={e => setPayForm(f => ({ ...f, Montant: e.target.value }))} />
             </Field>
             <Field label="Date de paiement">
-              <Input placeholder="JJ/MM/AAAA" value={String(payForm.Date_Paiement ?? "")} onChange={e => setPayForm(f => ({ ...f, Date_Paiement: e.target.value }))} />
+              <DateInput value={payForm.Date_Paiement != null ? String(payForm.Date_Paiement) : ""} onChange={v => setPayForm(f => ({ ...f, Date_Paiement: v }))} />
             </Field>
           </FormRow>
           <Field label="Mode de paiement">
@@ -402,7 +517,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
             </Field>
           </FormRow>
           <Field label="Date de naissance">
-            <Input placeholder="JJ/MM/AAAA" value={String(form.Date_Naissance ?? "")} onChange={e => setForm(f => ({ ...f, Date_Naissance: e.target.value }))} />
+            <DateInput value={form.Date_Naissance != null ? String(form.Date_Naissance) : ""} onChange={v => setForm(f => ({ ...f, Date_Naissance: v }))} />
           </Field>
           <FormRow>
             <Field label="Niveau">
@@ -424,6 +539,9 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               </Select>
             </Field>
           </FormRow>
+          <Field label="Date d'inscription">
+            <DateInput value={form.Date_Inscription != null ? String(form.Date_Inscription) : ""} onChange={v => setForm(f => ({ ...f, Date_Inscription: v }))} />
+          </Field>
           <SaveButton />
           <DeleteButton onClick={handleDelete} />
         </form>

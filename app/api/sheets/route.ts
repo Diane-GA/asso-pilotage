@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getServerUser } from "@/lib/supabase/server"
 import {
   getSheetsClient, SPREADSHEET_ID,
   sheetToObjects, appendRow, updateRowById, deleteRowById, deleteRowsWhere, nextId, fmtDate, parseDateFr, ensureColumn,
+  uploadToDrive, getHeaders, deleteDriveFile,
 } from "@/lib/google-sheets-server"
 
 type Sheets = ReturnType<typeof getSheetsClient>
@@ -18,6 +20,7 @@ function err(message: string, status = 400) {
 // ── GET ───────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  if (!(await getServerUser())) return err("Non authentifié.", 401)
   const { searchParams } = new URL(request.url)
   const action = searchParams.get("action") ?? "ping"
   const sheets = getSheetsClient()
@@ -34,6 +37,8 @@ export async function GET(request: NextRequest) {
         return ok(await getMembre(sheets, searchParams.get("idMembre")!))
       case "getPaiements":
         return ok(await getPaiements(sheets, searchParams.get("idMembre")!))
+      case "getDocuments":
+        return ok(await getDocuments(sheets, searchParams.get("idMembre")!))
       case "getEvenements":
         return ok(await getEvenements(sheets, searchParams.get("categorie") ?? undefined))
       case "getAssiduite":
@@ -56,6 +61,7 @@ export async function GET(request: NextRequest) {
 // ── POST ──────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  if (!(await getServerUser())) return err("Non authentifié.", 401)
   const body = await request.json()
   const { action } = body
   const sheets = getSheetsClient()
@@ -81,6 +87,8 @@ export async function POST(request: NextRequest) {
       case "addAtelier":      return ok(await addAtelier(sheets, body.data, body.beneficiaireIds, body.intervenantIds))
       case "updateAtelier":   return ok(await updateAtelier(sheets, body.idAtelier, body.data, body.beneficiaireIds, body.intervenantIds))
       case "deleteAtelier":   return ok(await deleteAtelier(sheets, body.idAtelier))
+      case "uploadFichier":   return ok(await uploadFichier(sheets, body))
+      case "deleteDocument":  return ok(await deleteDocument(sheets, body.idDoc))
       default:
         return err(`Action inconnue : ${action}`)
     }
@@ -88,6 +96,89 @@ export async function POST(request: NextRequest) {
     console.error("[sheets/POST]", action, e)
     return err(String(e), 500)
   }
+}
+
+// ── Upload de fichier (Drive) ─────────────────────────────
+
+// Dossiers Drive par catégorie de document
+const DOSSIERS_DOCUMENT: Record<string, string> = {
+  "Fiche d'inscription":    "1E5KdJqdbkrnjJEMtk2NpW-1RJdB28SOX",
+  "Droit à l'image":        "1vD-Q6oTVf6HrWBQIAd6Q7CSFm0zJIoAt",
+  "Charte d'engagement":    "1H7FcDHQSkf9q3DW71FVBonjwxll4yXsz",
+  "Autorisation de sortie": "14f-X5DRlA-z7GorJMUxlBq1KlXDGTFSi",
+}
+
+async function uploadFichier(sheets: Sheets, body: Record<string, unknown>) {
+  const nom = String(body.nom ?? "document")
+  const mimeType = String(body.mimeType ?? "application/octet-stream")
+  const dataBase64 = String(body.dataBase64 ?? "")
+  const idMembre = body.idMembre ? String(body.idMembre) : ""
+  const categorie = String(body.categorie ?? "")
+  if (!dataBase64) return { error: "Fichier vide" }
+  const folderId = DOSSIERS_DOCUMENT[categorie]
+  if (!folderId) return { error: `Catégorie inconnue : ${categorie}` }
+
+  // Nom du fichier : "Nom Prénom - Type - Date.ext"
+  let identite = ""
+  if (idMembre) {
+    const personnes = await sheetToObjects(sheets, "PERSONNE")
+    const p = personnes.find((x) => String(x["ID"]) === idMembre)
+    if (p) identite = `${String(p["Nom"] ?? "").trim()} ${String(p["Prenom"] ?? "").trim()}`.trim()
+  }
+  const d = new Date()
+  const p2 = (n: number) => String(n).padStart(2, "0")
+  const dateStr = `${p2(d.getDate())}-${p2(d.getMonth() + 1)}-${d.getFullYear()}`
+  const ext = nom.includes(".") ? nom.slice(nom.lastIndexOf(".")) : ""
+  const nomFichier = `${identite || "Document"} - ${categorie} - ${dateStr}${ext}`
+
+  // 1) Upload dans le dossier Drive correspondant à la catégorie
+  const { fileId, url } = await uploadToDrive(nomFichier, mimeType, dataBase64, folderId)
+
+  // 2) Enregistre une ligne dans la table DOCUMENTS JOINTS,
+  //    en remplissant la première ligne vide (évite de sauter les lignes pré-formatées)
+  const id = await nextId(sheets, "DOCUMENTS JOINTS")
+  const headers = await getHeaders(sheets, "DOCUMENTS JOINTS")
+  const valeurs: Record<string, unknown> = {
+    "ID": id,
+    "ID PERSONNE": idMembre,
+    "URL": url,
+    "Catégorie": categorie,
+  }
+  const row = headers.map((h) => (valeurs[h] !== undefined ? String(valeurs[h]) : ""))
+
+  const colA = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "DOCUMENTS JOINTS!A2:A" })
+  const aVals = colA.data.values ?? []
+  let ligne = aVals.length + 2 // par défaut : après la dernière ligne
+  for (let i = 0; i < aVals.length; i++) {
+    if (!aVals[i] || !aVals[i][0]) { ligne = i + 2; break }
+  }
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `DOCUMENTS JOINTS!A${ligne}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [row] },
+  })
+
+  return { ok: true, url, fileId, ID: id, nomFichier }
+}
+
+async function getDocuments(sheets: Sheets, idMembre: string) {
+  const docs = await sheetToObjects(sheets, "DOCUMENTS JOINTS")
+  return docs
+    .filter((d) => String(d["ID PERSONNE"]) === String(idMembre))
+    .map((d) => ({ ID_Doc: String(d["ID"]), URL: String(d["URL"] ?? ""), Categorie: String(d["Catégorie"] ?? "") }))
+}
+
+async function deleteDocument(sheets: Sheets, idDoc: string) {
+  // Best-effort : tenter de supprimer le fichier Drive associé
+  const docs = await sheetToObjects(sheets, "DOCUMENTS JOINTS")
+  const d = docs.find((x) => String(x["ID"]) === String(idDoc))
+  if (d) {
+    const m = /\/file\/d\/([^/]+)/.exec(String(d["URL"] ?? ""))
+    if (m) { try { await deleteDriveFile(m[1]) } catch { /* le compte de service ne peut pas toujours supprimer */ } }
+  }
+  const supprime = await deleteRowById(sheets, "DOCUMENTS JOINTS", String(idDoc))
+  return supprime ? { ok: true } : { error: "Document introuvable" }
 }
 
 // ── LECTURE ───────────────────────────────────────────────
@@ -392,7 +483,7 @@ async function addMembre(sheets: Sheets, data: Record<string, unknown>) {
     "Commentaire": data.Notes ?? "",
   })
 
-  if (data.Niveau || data.Statut_Inscription) {
+  if (data.Niveau || data.Statut_Inscription || data.Date_Inscription) {
     const inscId = await nextId(sheets, "INSCRIPTION")
     await appendRow(sheets, "INSCRIPTION", {
       "ID": inscId,
@@ -402,7 +493,9 @@ async function addMembre(sheets: Sheets, data: Record<string, unknown>) {
       "Statut": data.Statut_Inscription ?? "",
       "Niveau / Classe": data.Niveau ?? "",
       "Orientation": data.Source_Orientation ?? "",
-      "Date d'inscription": new Date().toISOString().split("T")[0],
+      "Date d'inscription": data.Date_Inscription
+        ? parseDateFr(String(data.Date_Inscription))
+        : new Date().toISOString().split("T")[0],
     })
   }
 
@@ -432,13 +525,15 @@ async function updateMembre(sheets: Sheets, idMembre: string, data: Record<strin
     data.Statut_Inscription !== undefined ||
     data.Niveau !== undefined ||
     data.Type_Apprenant !== undefined ||
-    data.Source_Orientation !== undefined
+    data.Source_Orientation !== undefined ||
+    data.Date_Inscription !== undefined
   ) {
     const imap: Record<string, unknown> = {}
     if (data.Statut_Inscription !== undefined) imap["Statut"] = data.Statut_Inscription
     if (data.Niveau !== undefined)             imap["Niveau / Classe"] = data.Niveau
     if (data.Type_Apprenant !== undefined)     imap["Type apprenant"] = data.Type_Apprenant
     if (data.Source_Orientation !== undefined) imap["Orientation"] = data.Source_Orientation
+    if (data.Date_Inscription !== undefined)   imap["Date d'inscription"] = parseDateFr(String(data.Date_Inscription))
 
     const inscriptions = await sheetToObjects(sheets, "INSCRIPTION")
     const persoInsc = inscriptions.filter((i) => String(i["Personne ID"]) === String(idMembre))
@@ -455,7 +550,9 @@ async function updateMembre(sheets: Sheets, idMembre: string, data: Record<strin
         "Niveau / Classe": data.Niveau ?? "",
         "Type apprenant": data.Type_Apprenant ?? "",
         "Orientation": data.Source_Orientation ?? "",
-        "Date d'inscription": new Date().toISOString().split("T")[0],
+        "Date d'inscription": data.Date_Inscription
+          ? parseDateFr(String(data.Date_Inscription))
+          : new Date().toISOString().split("T")[0],
       })
     }
   }
@@ -742,6 +839,7 @@ function mapMembre(p: Record<string, unknown>, inscriptions: Record<string, unkn
     Niveau: d ? d["Niveau / Classe"] : "",
     Type_Apprenant: d ? d["Type apprenant"] : "",
     Source_Orientation: d ? d["Orientation"] : "",
+    Date_Inscription: d ? fmtDate(d["Date d'inscription"] as string) : "",
     Nb_Enfants: "",
     Notes: p["Commentaire"] ?? "",
   }

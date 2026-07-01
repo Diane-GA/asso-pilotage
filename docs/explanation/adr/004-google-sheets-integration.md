@@ -1,11 +1,18 @@
 ---
 type: explanation
 adr: "004"
-statut: en discussion
+statut: accepté (module Familles)
 date: 2026-05-20
+maj: 2026-07-01
 ---
 
 # ADR 004 — Intégration Google Sheets
+
+> **Mise à jour (juillet 2026)** — Le module **Familles** est le premier à intégrer
+> Google Sheets. La solution retenue n'est **aucune des options A/B/C ci-dessous** mais
+> l'**API REST Google Sheets v4 appelée côté serveur via un compte de service** (voir
+> section « Décision » et « Implémentation réelle »). Le reste de l'app est toujours en
+> localStorage (ADR 001).
 
 ## Contexte
 
@@ -65,14 +72,41 @@ Ajouter dans l'app :
 
 Pas de sync temps réel, mais élimine la ressaisie manuelle.
 
+### Option D — API REST Google Sheets v4 côté serveur (RETENUE)
+
+Une **route serveur Next.js** (`app/api/sheets/route.ts`) parle directement à l'API
+REST Google Sheets v4 (et Drive) via la lib `googleapis`, authentifiée par un
+**compte de service**. Les credentials restent côté serveur (variables d'env), l'URL
+n'est jamais exposée publiquement.
+
+```
+Client (pages familles) → /api/sheets (route serveur) → googleapis → Google Sheets / Drive
+```
+
+**Avantages** : credentials privés (pas d'URL publique), CRUD complet, accès Drive,
+pas de service tiers. **Limites** : nécessite un compte de service + partage des
+Sheets/dossiers ; corps de requête plafonné à ~4,5 Mo sur Vercel (upload de fichiers).
+
 ## Décision
 
-**Phase 1 (immédiate)** : Option C — export/import CSV pour que l'équipe puisse
-travailler sans attendre une intégration complexe.
+**Retenue : Option D** — API REST v4 côté serveur via compte de service.
+Une première itération utilisait un Web App Apps Script (Option A) ; elle a été
+abandonnée au profit de l'Option D (credentials privés, accès Drive). Voir
+« Implémentation réelle ».
 
-**Phase 2** : Option A — Google Apps Script pour une sync semi-automatique.
+Une migration Supabase (Option B) reste envisageable à terme si le multi-utilisateurs
+et une vraie auth deviennent nécessaires.
 
-**Phase 3** : Option B — migration Supabase complète.
+## Implémentation réelle (module Familles)
+
+- **Sheet** : `BDD_Asso_CRM` (ID `1bOISBPwoU1xa5R4Um0fRASXKFeclJ8jB3A3CUHBMlI8`),
+  tables relationnelles FAMILLE / PERSONNE / INSCRIPTION / PAIEMENT / EVALUATION /
+  DOCUMENTS JOINTS…
+- **Route** : `app/api/sheets/route.ts` (routeur par `action`, GET = lecture / POST = écriture)
+- **Serveur** : `lib/google-sheets-server.ts` (clients Sheets + Drive, helpers CRUD)
+- **Client** : `lib/sheets-api.ts` (`API_URL = "/api/sheets"`)
+- **Documents** : upload par catégorie vers 4 dossiers Google Drive
+- Le fichier `apps-script/web-app.gs` de l'itération Apps Script est conservé mais **plus utilisé**.
 
 ## Structure des Google Sheets attendue
 
@@ -131,8 +165,16 @@ Participants :
 ### Sheet "Présences"
 | sessionId | beneficiaireId | statut | date |
 
-## Variables d'environnement à ajouter (option A)
+## Variables d'environnement (option D — retenue)
 
 ```
-NEXT_PUBLIC_SHEETS_SCRIPT_URL=https://script.google.com/macros/s/xxx/exec
+GOOGLE_CLIENT_EMAIL=...@....iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
+
+À définir dans `.env.local` **et** dans Vercel (Production + Preview + Development).
+Le compte de service doit avoir un accès **Éditeur** au Sheet `BDD_Asso_CRM` et aux
+dossiers Drive de documents. Scopes utilisés : `spreadsheets` + `drive`.
+
+> `NEXT_PUBLIC_SHEETS_SCRIPT_URL` et `NEXT_PUBLIC_SHEETS_API_URL` (itérations Apps Script)
+> sont **obsolètes** et ne sont plus lues par le code.

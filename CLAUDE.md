@@ -7,7 +7,7 @@
 
 Dashboard de pilotage pour une association de formation numérique (Ada Tech School).
 **SaaS Next.js** — interface uniquement.
-Persistance actuelle : `localStorage`. Migration en cours vers **Google Sheets** (voir section "Chantier en cours").
+Persistance : `localStorage` pour la plupart des modules. **Exception : le module Familles** est connecté à **Google Sheets** (API REST v4 côté serveur) — voir section "Backend Familles".
 
 ## Stack exacte
 
@@ -51,11 +51,13 @@ lib/
 ├── mock-data.ts        Données mockées (absences, finances, ateliers, com, bénévoles)
 ├── emargement-data.ts  Séances + présences initiales
 ├── roadmap-data.ts     6 thèmes, 16 use cases, 43 sous-actions
-└── familles-data.ts    Types + mock data + clés localStorage + getStatut() ✅ NOUVEAU
+├── sheets-api.ts       Couche client module Familles (fetch → /api/sheets)
+└── google-sheets-server.ts  Clients Sheets + Drive (compte de service, côté serveur)
 
 app/api/
-└── generate-post/route.ts  POST — génère contenu + hashtags via Claude (Anthropic SDK)
-                             Requiert ANTHROPIC_API_KEY dans .env.local
+├── generate-post/route.ts  POST — génère contenu + hashtags via Claude (Anthropic SDK)
+│                            Requiert ANTHROPIC_API_KEY dans .env.local
+└── sheets/route.ts     API REST Google Sheets v4 du module Familles (voir "Backend Familles")
 ```
 
 ## Conventions impératives
@@ -113,7 +115,7 @@ const { user, logout } = useAuth()
 ### "use client" — règle
 Toutes les pages sont `"use client"` (localStorage, état, hooks).
 Les composants partagés aussi (`Sidebar`, `SlideOver`, `AuthGate`).
-Pas de Server Actions. Les appels API se feront via **Google Apps Script Web App** (voir Chantier en cours).
+Pas de Server Actions. Le module Familles appelle sa **route interne `/api/sheets`** (API REST Google Sheets v4, voir "Backend Familles") ; les autres modules restent en localStorage.
 
 ## Modèle Post (Communication)
 
@@ -173,7 +175,7 @@ IDs réservés : 9001–9099. Supprimer ce fichier + le dossier `app/dev/` avant
 - ❌ Ne pas créer `tailwind.config.ts` — config dans `globals.css`
 - ❌ Ne pas importer `Linkedin`, `Instagram`, `Facebook`, `Kanban` de lucide-react (n'existent pas en v1.16.0)
 - ❌ Ne pas utiliser `bg-[var(--color-xxx)]` — utiliser `bg-xxx`
-- ❌ Ne pas créer de routes API (`app/api/`) sans décision d'équipe — exception : `app/api/generate-post/route.ts` (génération IA, décidé en session)
+- ❌ Ne pas créer de routes API (`app/api/`) sans décision d'équipe — exceptions validées : `app/api/generate-post/route.ts` (génération IA), `app/api/sheets/route.ts` (backend Google Sheets du module Familles), `app/api/ocr/route.ts` (OCR bulletins d'inscription via Gemini API)
 - ❌ Ne pas mettre de données dans l'URL (PII)
 - ❌ Ne pas casser le pattern SlideOver existant (cohérence UX)
 
@@ -458,61 +460,81 @@ Overall average: **60-90% token reduction** on common development operations.
 
 ## Module Familles — ce qui a été construit
 
+> ⚠️ **Le module Familles ne suit PAS le pattern localStorage** du reste de l'app.
+> Il lit et écrit dans **Google Sheets** via une API REST v4 côté serveur (voir
+> section « Backend Familles » ci-dessous). Il n'y a plus de `lib/familles-data.ts`.
+
 ### Page listing (`/familles`)
-- 3 onglets : **Familles** (kanban), **Parents** (liste), **Enfants** (liste)
-- Tri alphabétique, barre de recherche, en-têtes de colonnes alignées
-- Colonnes : Membre / Groupe / Inscription / Assiduité / Statut
-- Badge **Statut** calculé depuis l'assiduité : ≥75% Actif, 50-74% À surveiller, <50% Abandon
-- Bouton **"+ Ajouter une famille"** (onglet Familles uniquement)
+- 2 onglets : **Familles** et **Membres**
+- Recherche **par préfixe** (début du nom), tolérante aux accents, tri alphabétique
+- Bouton **"+ Ajouter une famille"** (onglet Familles)
 
 ### Fiche famille (`/familles/[id]`)
-- Infos famille + bouton Modifier (avec cascade adresse → tous les membres)
-- Cartes membres avec assiduité + statut
-- Bouton **"+ Ajouter un membre"** (Parent ou Enfant)
+- Infos famille + bouton Modifier (cascade adresse → tous les membres)
+- **Autocomplétion d'adresse** via l'API Base Adresse Nationale (`components/AdresseAutocomplete.tsx`)
+- Cartes membres + **Journal de suivi** (commentaires)
+- Bouton **"+ Ajouter un membre"**
 
 ### Fiche membre (`/familles/[id]/membre/[membreId]`)
-- Breadcrumb, badges type/groupe/statut
-- Infos : téléphone, email, WhatsApp, adresse, inscriptions, autorisation, **date de naissance**, **âge**
-- Bloc résultats : Test 1/20, Test 2/20, Assiduité%
-- **Date de naissance → calcule l'âge automatiquement** dans le formulaire
+- Breadcrumb, badges type/statut, état civil, inscriptions, **âge calculé auto** depuis la date de naissance
+- **Paiements** : ajout / modification / suppression, rattachés à une inscription (sélecteur d'année)
+- **Reste à payer** : champ « Montant du » par inscription → récap payé / attendu / reste (badge rouge/vert)
+- **Documents** : upload par catégorie vers Google Drive, consultation (aperçu Drive) + suppression
+- **Journal de suivi** : commentaires / appels / emails horodatés, filtrable par type, groupé par date (`components/JournalSuivi.tsx`)
 
-### Données (`lib/familles-data.ts`)
-- Clés localStorage : `asso-familles`, `asso-beneficiaires-parents-v2`, `asso-beneficiaires-enfants-v2`
-- 5 familles, 6 parents, 7 enfants avec tous les champs (dont âge + date de naissance)
-- Fonction `getStatut(assiduite: number): "Actif" | "À surveiller" | "Abandon"`
-- Couleur du module : `familles` / `familles-light` / `familles-dark` (violet)
+### Couleur du module
+`familles` / `familles-light` / `familles-dark` (violet).
 
 ---
 
-## Chantier en cours — Migration Google Sheets
+## Backend Familles — Google Sheets REST API v4 (implémenté)
 
-### Décision
-Connecter le site directement à **Google Sheets** via **Google Apps Script** (Web App) pour remplacer le localStorage.
+Le module Familles est connecté à **Google Sheets** via l'**API REST v4** appelée
+**côté serveur** avec un **compte de service** (PR #8, puis #9/#10). Ce n'est PAS
+Apps Script (une variante Apps Script Web App existait dans les premières PR et a
+été abandonnée ; le fichier `apps-script/web-app.gs` est conservé mais n'est plus
+utilisé par l'app).
 
-### Architecture cible
+### Architecture
 ```
-Google Sheet (données) → Apps Script Web App (API) → Next.js (fetch)
+Client (pages familles)
+  → lib/sheets-api.ts        (fetch vers la route interne, agnostique au transport)
+  → app/api/sheets/route.ts  (routeur par "action" : GET = lecture, POST = écriture)
+  → lib/google-sheets-server.ts  (clients Sheets + Drive via compte de service)
+  → Google Sheet "BDD_Asso_CRM" + Google Drive
 ```
 
-### Nouveau Google Sheet
-- URL : `https://docs.google.com/spreadsheets/d/1vvI6bzj3N0hjBWzRi9p7Yt_l9yzH2XAxDnDBDwTZtCs`
-- 2 feuilles : **Famille** et **Contact**
-
-### Structure connue — feuille "Famille"
-| Colonne | Exemple |
+### Fichiers clés
+| Fichier | Rôle |
 |---|---|
-| ID Famille | FAM001 |
-| Nom | Dupont |
-| Adresse | 1 rue de la prairie |
-| Quartier QVP | Oui |
-| Contact principal, ID Contact | CONT001 |
-| Membres de la famille - ID contact | CONT001, CONT002 |
+| `lib/sheets-api.ts` | Couche client. `API_URL = "/api/sheets"`. Fonctions `fetchFamilles`, `addMembre`, `addPaiement`, `updateInscription`, `uploadFichier`, `fetchDocuments`… |
+| `app/api/sheets/route.ts` | Route serveur (exception validée à la règle « pas de `app/api/` »). Switch par `action`. |
+| `lib/google-sheets-server.ts` | Auth compte de service, helpers `sheetToObjects`/`appendRow`/`updateRowById`/`deleteRowById`/`ensureColumn`, client Drive `uploadToDrive`/`deleteDriveFile`. |
 
-### ❓ À faire pour reprendre ce chantier
-1. Récupérer les **colonnes de l'onglet "Contact"** (pas encore obtenues)
-2. Confirmer : parents et enfants dans la même table Contact ? Quelle colonne distingue les deux ?
-3. Confirmer le lien famille ↔ contact via les IDs
-4. Créer le script Apps Script (doGet / doPost) sur le nouveau Sheet
-5. Adapter `lib/familles-data.ts` aux nouveaux types
-6. Remplacer les appels localStorage par des `fetch()` vers l'Apps Script
-7. Tester le CRUD complet (créer, modifier, supprimer)
+### Google Sheet — `BDD_Asso_CRM`
+- ID : `1bOISBPwoU1xa5R4Um0fRASXKFeclJ8jB3A3CUHBMlI8`
+- Tables : **FAMILLE**, **PERSONNE** (état civil), **INSCRIPTION** (niveau/statut/`Montant du`), **PAIEMENT**, **EVALUATION**, **DOCUMENTS JOINTS**, EVENEMENT, ASSIDUITE, SCOLARITE…
+- L'état civil vit dans PERSONNE ; le niveau/statut dans INSCRIPTION.
+
+### Documents → Google Drive
+4 dossiers Drive (un par catégorie, IDs en dur dans `route.ts`) partagés **en Éditeur**
+avec le compte de service. Fichier renommé `Nom Prénom - Type - Date.ext`, ligne
+ajoutée dans la table `DOCUMENTS JOINTS`.
+⚠️ Upload en base64 via la route → plafond Vercel **~4,5 Mo** par requête.
+
+### Variables d'environnement requises (`.env.local` + Vercel)
+```
+GOOGLE_CLIENT_EMAIL=...@....iam.gserviceaccount.com   # compte de service
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GEMINI_API_KEY=...                                    # OCR bulletins d'inscription (Google AI Studio)
+```
+- Scopes utilisés : `spreadsheets` + `drive`.
+- Le compte de service doit avoir **accès Éditeur** au Sheet `BDD_Asso_CRM` et aux 4 dossiers Drive.
+- `NEXT_PUBLIC_SHEETS_API_URL` / `NEXT_PUBLIC_SHEETS_SCRIPT_URL` : **obsolètes**, ne plus utiliser.
+
+### Helpers de mapping (`lib/sheets-api.ts`)
+- `calculerAge(dateStr)` — âge depuis une date `JJ/MM/AAAA`
+- `getStatut(statut)` — normalise vers `EN COURS` / `ARRÊTÉ` / `SUSPENDU`
+
+> Le reste de l'app (dashboard, communication, absences, ateliers, bénévoles, membres…)
+> reste en **localStorage** — seul Familles est passé sur Google Sheets.

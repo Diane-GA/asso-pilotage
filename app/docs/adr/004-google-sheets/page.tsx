@@ -9,10 +9,17 @@ export default function Adr004Page() {
         <p className="text-muted mt-2">Options étudiées pour synchroniser les données de l&apos;application avec les Google Sheets de l&apos;association.</p>
       </header>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
-        <span className="text-amber-700 font-semibold text-sm">Statut :</span>
-        <span className="text-amber-800 font-bold text-sm">En discussion</span>
-        <span className="text-amber-600 text-xs ml-auto">2026-05-20</span>
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+        <span className="text-emerald-700 font-semibold text-sm">Statut :</span>
+        <span className="text-emerald-800 font-bold text-sm">Accepté (module Familles) — Option D</span>
+        <span className="text-emerald-600 text-xs ml-auto">MAJ 2026-07-01</span>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 leading-relaxed">
+        <strong>Mise à jour (juillet 2026)</strong> — Le module <strong>Familles</strong> est le premier à intégrer
+        Google Sheets. La solution retenue n&apos;est <strong>aucune des options A/B/C</strong> ci-dessous, mais
+        l&apos;<strong>API REST Google Sheets v4 appelée côté serveur via un compte de service</strong> (Option D,
+        voir plus bas). Le reste de l&apos;app est toujours en localStorage.
       </div>
 
       <section className="space-y-4">
@@ -81,15 +88,33 @@ export async function updatePresence(sessionId: number, benefId: number, statut:
           Ajouter dans l&apos;app un bouton <strong>Exporter CSV</strong> sur les pages Bénéficiaires et Présences, et un bouton <strong>Importer CSV</strong> pour charger un fichier Google Sheets exporté.
           Pas de sync temps réel, mais élimine la ressaisie manuelle.
         </p>
+
+        <h3 className="text-base font-semibold text-foreground">Option D — API REST Google Sheets v4 côté serveur (RETENUE)</h3>
+        <p className="text-sm text-muted leading-relaxed">
+          Une <strong>route serveur Next.js</strong> (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">app/api/sheets/route.ts</code>) parle directement à l&apos;API REST Google Sheets v4 (et Drive) via la lib <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">googleapis</code>, authentifiée par un <strong>compte de service</strong>. Les credentials restent côté serveur.
+        </p>
+        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`Client (pages familles) → /api/sheets (route serveur) → googleapis → Google Sheets / Drive`}</pre>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800">
+            <strong>Avantages :</strong> credentials privés (pas d&apos;URL publique), CRUD complet, accès Drive
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+            <strong>Limites :</strong> compte de service à gérer ; corps de requête ~4,5 Mo max sur Vercel
+          </div>
+        </div>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-bold text-foreground mt-2">Décision</h2>
-        <ul className="list-disc list-inside text-sm text-muted space-y-1">
-          <li><strong>Phase 1 (immédiate) :</strong> Option C — export/import CSV</li>
-          <li><strong>Phase 2 :</strong> Option A — Google Apps Script pour une sync semi-automatique</li>
-          <li><strong>Phase 3 :</strong> Option B — migration Supabase complète</li>
-        </ul>
+        <p className="text-sm text-muted leading-relaxed">
+          <strong>Option D retenue</strong> — API REST v4 côté serveur via compte de service.
+          Une première itération utilisait un Web App Apps Script (Option A), abandonnée au profit
+          de l&apos;Option D (credentials privés, accès Drive). Une migration Supabase (Option B)
+          reste envisageable à terme.
+        </p>
+        <p className="text-sm text-muted leading-relaxed">
+          <strong>Implémentation (module Familles)</strong> : Sheet <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">BDD_Asso_CRM</code> (tables FAMILLE / PERSONNE / INSCRIPTION / PAIEMENT / EVALUATION / DOCUMENTS JOINTS), route <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">app/api/sheets/route.ts</code>, serveur <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">lib/google-sheets-server.ts</code>, client <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-700">lib/sheets-api.ts</code>. Documents uploadés vers Google Drive.
+        </p>
       </section>
 
       <section className="space-y-4">
@@ -125,8 +150,14 @@ beneficiaireIds | benevoleIds`}</pre>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-foreground mt-2">Variables d&apos;environnement à ajouter (option A)</h2>
-        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`NEXT_PUBLIC_SHEETS_SCRIPT_URL=https://script.google.com/macros/s/xxx/exec`}</pre>
+        <h2 className="text-xl font-bold text-foreground mt-2">Variables d&apos;environnement (Option D — retenue)</h2>
+        <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">{`GOOGLE_CLIENT_EMAIL=...@....iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"`}</pre>
+        <p className="text-xs text-muted leading-relaxed">
+          À définir dans <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">.env.local</code> et dans Vercel.
+          Le compte de service doit avoir un accès <strong>Éditeur</strong> au Sheet <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">BDD_Asso_CRM</code> et aux dossiers Drive.
+          Les anciennes variables <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">NEXT_PUBLIC_SHEETS_SCRIPT_URL</code> / <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">NEXT_PUBLIC_SHEETS_API_URL</code> sont obsolètes.
+        </p>
       </section>
     </div>
   )

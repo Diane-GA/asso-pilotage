@@ -34,6 +34,7 @@ const docSections: DocSection[] = [
       { href: "/docs/how-to/nouveau-module", label: "Nouveau module" },
       { href: "/docs/how-to/crud-module",    label: "CRUD module" },
       { href: "/docs/how-to/deployer",       label: "Déployer" },
+      { href: "/docs/how-to/migration",      label: "Migration asso" },
     ],
   },
   {
