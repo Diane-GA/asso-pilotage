@@ -15,6 +15,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   // Pages légales publiques : accessibles sans authentification, sans sidebar.
   const isLegal = LEGAL_PATHS.includes(pathname)
   const isLogin = pathname === "/login"
+  // Le tableau de bord est un "lanceur" plein écran : pas de sidebar (mais auth requise).
+  const isDashboard = pathname === "/dashboard"
 
   useEffect(() => {
     if (loading) return
@@ -35,6 +37,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
       </div>
     )
+  }
+
+  // Tableau de bord connecté → lanceur plein écran, sans sidebar
+  if (isDashboard) {
+    return <>{children}</>
   }
 
   // Connecté → sidebar + contenu
