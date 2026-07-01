@@ -123,8 +123,17 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
   }
 
   function openNewPaiement() {
+    const inscAvecReste = inscriptions
+      .map(insc => {
+        const paye = paiements.filter(p => p.ID_Inscription === insc.ID_Inscription)
+          .reduce((s, p) => s + (Number(p.Montant) || 0), 0)
+        const attendu = (Number(insc.Montant_Adhesion) || 0) + (Number(insc.Montant_Inscription) || 0)
+        return { insc, reste: attendu - paye }
+      })
+      .sort((a, b) => b.reste - a.reste)
+    const defaultInscId = inscAvecReste[0]?.insc.ID_Inscription ?? inscriptions[0]?.ID_Inscription ?? ""
     setPayEditing(false)
-    setPayForm({ ID_Inscription: inscriptions[0]?.ID_Inscription ?? "", Date_Paiement: "", Montant: "", Mode_Paiement: "" })
+    setPayForm({ ID_Inscription: defaultInscId, Date_Paiement: "", Montant: "", Mode_Paiement: "" })
     setPayOpen(true)
   }
 
@@ -409,7 +418,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
 
       {/* Paiements */}
       <div className="bg-surface border border-border rounded-xl p-5 mb-6">
-        <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="flex items-center justify-between mb-3 gap-2">
           <h2 className="text-sm font-semibold text-foreground">
             Paiements
             {paiements.length > 0 && <span className="ml-2 text-xs font-normal text-muted">({paiements.length})</span>}
@@ -422,46 +431,70 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
           )}
         </div>
 
-        {/* Récap par inscription : attendu / payé / reste à payer */}
-        {inscriptions.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {inscriptions.map(insc => {
-              const paye = paiements
-                .filter(p => p.ID_Inscription === insc.ID_Inscription)
-                .reduce((s, p) => s + (Number(p.Montant) || 0), 0)
-              const attendu = (Number(insc.Montant_Adhesion) || 0) + (Number(insc.Montant_Inscription) || 0)
-              const reste = attendu - paye
-              return (
-                <div key={insc.ID_Inscription} className="rounded-lg border border-border px-4 py-3">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-sm font-semibold text-foreground">{insc.Annee_Scolaire || "Inscription"}</p>
-                    {attendu > 0 && (
-                      reste > 0
-                        ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-absences-light text-absences-dark">Reste à payer {reste} €</span>
-                        : <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-finances-light text-finances-dark">Soldé</span>
+        {/* Bandeau total */}
+        {(() => {
+          const totalAttendu = inscriptions.reduce((s, insc) =>
+            s + (Number(insc.Montant_Adhesion) || 0) + (Number(insc.Montant_Inscription) || 0), 0)
+          const totalPaye = paiements.reduce((s, p) => s + (Number(p.Montant) || 0), 0)
+          const totalReste = totalAttendu - totalPaye
+          if (totalAttendu === 0) return null
+          return (
+            <div className="mb-4">
+              {totalReste > 0
+                ? <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-absences-light text-absences-dark">Reste à régler : {totalReste} €</span>
+                : <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-finances-light text-finances-dark">Tout est soldé ✓</span>
+              }
+            </div>
+          )
+        })()}
+
+        {/* Liste des paiements */}
+        {paiements.length === 0 ? (
+          <p className="text-sm text-muted italic">
+            {inscriptions.length === 0 ? "Aucune inscription : impossible d'ajouter un paiement." : "Aucun paiement enregistré."}
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {[...paiements]
+              .sort((a, b) => (b.Date_Paiement ?? "").localeCompare(a.Date_Paiement ?? ""))
+              .map(p => (
+                <li key={p.ID_Paiement} className="flex items-center justify-between gap-3 py-3 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-sm font-bold text-familles-dark shrink-0">{p.Montant} €</span>
+                    {p.Mode_Paiement && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-familles-light text-familles-dark">{p.Mode_Paiement}</span>
+                    )}
+                    {p.Date_Paiement && (
+                      <span className="text-xs text-muted">{p.Date_Paiement}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-1.5 text-xs text-muted flex-wrap">
-                    <span>Payé <span className="font-medium text-foreground">{paye} €</span></span>
-                    <span>·</span>
-                    <span>Attendu <span className="font-medium text-foreground">{attendu} €</span></span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEditPaiement(p)} aria-label="Modifier" title="Modifier"
+                      className="p-1.5 rounded text-muted hover:text-familles-dark hover:bg-familles-light transition-colors">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={async () => {
+                        if (!confirm("Supprimer ce paiement ?")) return
+                        await deletePaiement(p.ID_Paiement)
+                        await loadData()
+                      }}
+                      aria-label="Supprimer" title="Supprimer"
+                      className="p-1.5 rounded text-muted hover:text-absences-dark hover:bg-absences-light transition-colors">
+                      <X size={13} />
+                    </button>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {inscriptions.length === 0 && (
-          <p className="text-sm text-muted italic">Aucune inscription : impossible d'ajouter un paiement.</p>
+                </li>
+              ))
+            }
+          </ul>
         )}
       </div>
 
       {/* SlideOver paiement */}
       <SlideOver open={payOpen} onClose={() => setPayOpen(false)} title={payEditing ? "Modifier le paiement" : "Ajouter un paiement"} width="md">
         <form onSubmit={e => { e.preventDefault(); handleSavePaiement() }} className="flex flex-col gap-4">
-          {!payEditing && inscriptions.length > 1 && (
-            <Field label="Année scolaire (inscription)" required>
+          {!payEditing && inscriptions.length > 0 && (
+            <Field label="Année scolaire" required>
               <Select value={String(payForm.ID_Inscription ?? "")} onChange={e => setPayForm(f => ({ ...f, ID_Inscription: e.target.value }))}>
                 {inscriptions.map(i => (
                   <option key={i.ID_Inscription} value={i.ID_Inscription}>{i.Annee_Scolaire || `Inscription ${i.ID_Inscription}`}</option>
