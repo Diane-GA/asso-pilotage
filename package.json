@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "seed:sheet": "node --env-file=.env scripts/seed-sheet.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
