@@ -480,6 +480,7 @@ async function updateInscription(sheets: Sheets, idInscription: string, data: Re
   if (data.Niveau !== undefined)           map["Niveau / Classe"] = data.Niveau
   if (data.Disponibilite !== undefined)    map["Disponibilite"] = data.Disponibilite
   if (data.Orientation !== undefined)      map["Orientation"] = data.Orientation
+  if (data.Remarques !== undefined)        map["Remarques"] = data.Remarques
   const ok = await updateRowById(sheets, "INSCRIPTION", idInscription, map)
   return ok ? { ok: true } : { error: "Inscription introuvable" }
 }

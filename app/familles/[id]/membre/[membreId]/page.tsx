@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, use } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import SlideOver, { Field, Input, Select, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
+import SlideOver, { Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
 import JournalSuivi from "@/components/JournalSuivi"
 import { ChevronRight, Phone, Mail, Globe, Plus, Pencil, Upload, FileText, ExternalLink, X } from "lucide-react"
 import {
@@ -43,6 +43,15 @@ const statutStyle: Record<string, string> = {
   "SUSPENDU": "bg-ateliers-light text-ateliers-dark",
   "ARRÊTÉ":   "bg-absences-light text-absences-dark",
   "ARRETE":   "bg-absences-light text-absences-dark",
+  "TERMINÉ":  "bg-slate-100 text-slate-600",
+  "TERMINE":  "bg-slate-100 text-slate-600",
+}
+
+function parseAnneeScolaireEnd(annee: string): Date | null {
+  const match = String(annee).match(/^(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const endYear = 2000 + parseInt(match[2])
+  return new Date(endYear, 7, 31) // 31 août de l'année de fin
 }
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -77,6 +86,9 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
     Disponibilite: "", Orientation: "",
     Montant_Adhesion: "", Montant_Inscription: "",
   })
+  const [finOpen, setFinOpen] = useState(false)
+  const [finInsc, setFinInsc] = useState<InscriptionSheet | null>(null)
+  const [finForm, setFinForm] = useState({ Statut: "", Remarques: "" })
   const [docOpen, setDocOpen]   = useState(false)
   const [docType, setDocType]   = useState("")
   const [docFile, setDocFile]   = useState<File | null>(null)
@@ -94,8 +106,23 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
       setMembre(m)
       setForm(m)
       setPaiements(p)
-      setInscriptions(m.inscriptions ?? [])
       setDocuments(docs)
+
+      // Mise à jour automatique : inscriptions EN COURS dont l'année est échue → Terminé
+      const fetchedInscriptions = m.inscriptions ?? []
+      const today = new Date()
+      const toTerminer = fetchedInscriptions.filter(insc => {
+        if (!insc.Statut?.toUpperCase().includes("COURS")) return false
+        const end = parseAnneeScolaireEnd(String(insc.Annee_Scolaire))
+        return end !== null && today > end
+      })
+      if (toTerminer.length > 0) {
+        await Promise.all(toTerminer.map(insc => updateInscription(insc.ID_Inscription, { Statut: "Terminé" })))
+        const m2 = await fetchMembre(membreId)
+        setInscriptions(m2.inscriptions ?? [])
+      } else {
+        setInscriptions(fetchedInscriptions)
+      }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [id, membreId])
@@ -176,6 +203,16 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
     })
     await loadData()
     setInscOpen(false)
+  }
+
+  async function handleSaveFin() {
+    if (!finInsc) return
+    await updateInscription(finInsc.ID_Inscription, {
+      Statut: finForm.Statut,
+      Remarques: finForm.Remarques,
+    })
+    await loadData()
+    setFinOpen(false)
   }
 
   function openDocument() {
@@ -402,6 +439,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                         (adhésion {Number(insc.Montant_Adhesion) || 0} € + inscription {Number(insc.Montant_Inscription) || 0} €)
                       </span>
                     </p>
+                    <div className="flex flex-col items-end gap-1">
                     <button
                       onClick={() => {
                         setInscEditing(insc)
@@ -420,6 +458,17 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                     >
                       <Pencil size={12} /> Modifier
                     </button>
+                    <button
+                      onClick={() => {
+                        setFinInsc(insc)
+                        setFinForm({ Statut: insc.Statut ?? "", Remarques: String(insc.Remarques ?? "") })
+                        setFinOpen(true)
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-absences-dark hover:underline"
+                    >
+                      <X size={12} /> Mettre fin à l'inscription
+                    </button>
+                    </div>
                   </div>
                   {insc.Remarques && (
                     <p className="text-xs text-muted mt-1.5">{insc.Remarques}</p>
@@ -536,6 +585,33 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
           </Field>
           <SaveButton />
           {payEditing && <DeleteButton onClick={handleDeletePaiement} />}
+        </form>
+      </SlideOver>
+
+      {/* SlideOver mettre fin à l'inscription */}
+      <SlideOver open={finOpen} onClose={() => setFinOpen(false)} title="Mettre fin à l'inscription" width="md">
+        <form onSubmit={e => { e.preventDefault(); handleSaveFin() }} className="flex flex-col gap-4">
+          {finInsc && (
+            <div className="px-3 py-2 rounded-xl bg-slate-50 border border-border text-xs text-muted">
+              Inscription {finInsc.Annee_Scolaire || "—"}
+            </div>
+          )}
+          <Field label="Nouveau statut" required>
+            <Select value={finForm.Statut} onChange={e => setFinForm(f => ({ ...f, Statut: e.target.value }))}>
+              <option value="">— Choisir —</option>
+              <option value="Arrêté">Arrêté</option>
+              <option value="Suspendu">Suspendu</option>
+              <option value="Terminé">Terminé</option>
+            </Select>
+          </Field>
+          <Field label="Remarque">
+            <Textarea
+              value={finForm.Remarques}
+              onChange={e => setFinForm(f => ({ ...f, Remarques: e.target.value }))}
+              placeholder="Motif, observations…"
+            />
+          </Field>
+          <SaveButton />
         </form>
       </SlideOver>
 
