@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerUser } from "@/lib/supabase/server"
 import {
   getSheetsClient, SPREADSHEET_ID,
-  sheetToObjects, appendRow, updateRowById, deleteRowById, deleteRowsWhere, nextId, fmtDate, parseDateFr, ensureColumn,
+  sheetToObjects, appendRow, updateRowById, deleteRowById, deleteRowsWhere, deleteRowsWhereAll, nextId, fmtDate, parseDateFr, ensureColumn,
   uploadToDrive, getHeaders, deleteDriveFile,
 } from "@/lib/google-sheets-server"
 
@@ -309,26 +309,26 @@ async function getAssiduite(sheets: Sheets, idEvenement?: string, idPersonne?: s
 // ── LECTURE ATELIERS ──────────────────────────────────────
 
 async function getAteliers(sheets: Sheets, audience?: string) {
-  const [ateliers, benefLinks, intervLinks] = await Promise.all([
+  const [ateliers, participants] = await Promise.all([
     sheetToObjects(sheets, "ATELIER"),
-    sheetToObjects(sheets, "ATELIER_BENEFICIAIRE"),
-    sheetToObjects(sheets, "ATELIER_INTERVENANT"),
+    sheetToObjects(sheets, "ATELIER_PARTICIPANT"),
   ])
   return ateliers
     .filter((a) => !audience || String(a["Audience"]).toLowerCase() === audience.toLowerCase())
     .map((a) => {
       const id = String(a["ID"])
+      const liens = participants.filter((l) => String(l["Atelier ID"]) === id)
       const beneficiaireIds = Array.from(new Set(
-        benefLinks
-          .filter((l) => String(l["Atelier ID"]) === id)
+        liens
+          .filter((l) => l["Role"] === "Beneficiaire")
           .map((l) => String(l["Personne ID"]))
       ))
-      const intervenants = intervLinks
-        .filter((l) => String(l["Atelier ID"]) === id)
+      const intervenants = liens
+        .filter((l) => l["Role"] === "Intervenant")
         .map((l) => ({
           ID_Intervenant: String(l["Intervenant ID"]),
           Heures: l["Heures"] ?? "",
-          Role: l["Role"] ?? "",
+          Role: l["Fonction"] ?? "",
         }))
       const competences = String(a["Competences ciblees"] ?? "")
         .split(",").map((s) => s.trim()).filter(Boolean)
@@ -742,17 +742,17 @@ async function syncAtelierLiens(
   intervenantIds?: (string | number)[],
 ) {
   if (beneficiaireIds !== undefined) {
-    await deleteRowsWhere(sheets, "ATELIER_BENEFICIAIRE", "Atelier ID", [String(idAtelier)])
+    await deleteRowsWhereAll(sheets, "ATELIER_PARTICIPANT", { "Atelier ID": String(idAtelier), "Role": "Beneficiaire" })
     for (const pid of beneficiaireIds) {
-      const bid = await nextId(sheets, "ATELIER_BENEFICIAIRE")
-      await appendRow(sheets, "ATELIER_BENEFICIAIRE", { "ID": bid, "Atelier ID": idAtelier, "Personne ID": pid })
+      const bid = await nextId(sheets, "ATELIER_PARTICIPANT")
+      await appendRow(sheets, "ATELIER_PARTICIPANT", { "ID": bid, "Atelier ID": idAtelier, "Personne ID": pid, "Role": "Beneficiaire" })
     }
   }
   if (intervenantIds !== undefined) {
-    await deleteRowsWhere(sheets, "ATELIER_INTERVENANT", "Atelier ID", [String(idAtelier)])
+    await deleteRowsWhereAll(sheets, "ATELIER_PARTICIPANT", { "Atelier ID": String(idAtelier), "Role": "Intervenant" })
     for (const iid of intervenantIds) {
-      const rid = await nextId(sheets, "ATELIER_INTERVENANT")
-      await appendRow(sheets, "ATELIER_INTERVENANT", { "ID": rid, "Atelier ID": idAtelier, "Intervenant ID": iid, "Heures": "", "Role": "" })
+      const rid = await nextId(sheets, "ATELIER_PARTICIPANT")
+      await appendRow(sheets, "ATELIER_PARTICIPANT", { "ID": rid, "Atelier ID": idAtelier, "Intervenant ID": iid, "Role": "Intervenant", "Heures": "", "Fonction": "" })
     }
   }
 }
@@ -806,10 +806,7 @@ async function updateAtelier(
 }
 
 async function deleteAtelier(sheets: Sheets, idAtelier: string) {
-  await Promise.all([
-    deleteRowsWhere(sheets, "ATELIER_BENEFICIAIRE", "Atelier ID", [String(idAtelier)]),
-    deleteRowsWhere(sheets, "ATELIER_INTERVENANT", "Atelier ID", [String(idAtelier)]),
-  ])
+  await deleteRowsWhere(sheets, "ATELIER_PARTICIPANT", "Atelier ID", [String(idAtelier)])
   const deleted = await deleteRowById(sheets, "ATELIER", idAtelier)
   return deleted ? { ok: true } : { error: "Atelier introuvable" }
 }
