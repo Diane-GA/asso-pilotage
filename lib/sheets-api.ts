@@ -24,6 +24,7 @@ export interface MembreSheet {
   WhatsApp: string
   Droit_Image?: string
   Charte?: string
+  Beneficiaire?: string
   Statut_Inscription: string
   Niveau: string
   Type_Apprenant?: string
@@ -59,7 +60,6 @@ export interface InscriptionSheet {
   Disponibilite: string
   Orientation: string
   Date_Inscription: string
-  Beneficiaire: string
   Montant_Adhesion: string | number
   Montant_Du?: string | number
   Remarques: string

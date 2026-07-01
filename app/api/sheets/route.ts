@@ -369,6 +369,7 @@ async function addMembre(sheets: Sheets, data: Record<string, unknown>) {
     "Langue maternelle": data.Langue_Maternelle ?? "",
     "Droit a l'image": data.Droit_Image ?? "",
     "Charte d'engagement": data.Charte ?? "",
+    "Beneficiaire": data.Beneficiaire ?? "",
     "Commentaire": data.Notes ?? "",
   })
 
@@ -405,6 +406,7 @@ async function updateMembre(sheets: Sheets, idMembre: string, data: Record<strin
   if (data.Langue_Maternelle !== undefined) pmap["Langue maternelle"] = data.Langue_Maternelle
   if (data.Droit_Image !== undefined)      pmap["Droit a l'image"] = data.Droit_Image
   if (data.Charte !== undefined)           pmap["Charte d'engagement"] = data.Charte
+  if (data.Beneficiaire !== undefined)     pmap["Beneficiaire"] = data.Beneficiaire
   if (data.Notes !== undefined)            pmap["Commentaire"] = data.Notes
 
   const updated = await updateRowById(sheets, "PERSONNE", idMembre, pmap)
@@ -627,6 +629,7 @@ function mapMembre(p: Record<string, unknown>, inscriptions: Record<string, unkn
     WhatsApp: "",
     Droit_Image: p["Droit a l'image"],
     Charte: p["Charte d'engagement"],
+    Beneficiaire: p["Beneficiaire"],
     Statut_Inscription: d ? d["Statut"] : "",
     Niveau: d ? d["Niveau / Classe"] : "",
     Type_Apprenant: d ? d["Type apprenant"] : "",
@@ -648,7 +651,6 @@ function mapInscription(i: Record<string, unknown>) {
     Disponibilite: i["Disponibilite"],
     Orientation: i["Orientation"],
     Date_Inscription: fmtDate(i["Date d'inscription"] as string),
-    Beneficiaire: i["Beneficiaire"],
     Montant_Adhesion: i["Montant adhesion"],
     Montant_Du: i["Montant du"] !== undefined && i["Montant du"] !== "" ? i["Montant du"] : "",
     Remarques: i["Remarques"],
