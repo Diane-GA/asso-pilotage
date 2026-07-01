@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from "next/server"
+import { getServerUser } from "@/lib/supabase/server"
 import {
   CSV_URL,
   OPEN_URL,
@@ -22,6 +23,9 @@ export const revalidate = 0
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function GET() {
+  if (!(await getServerUser())) {
+    return NextResponse.json<SheetErrorResponse>({ status: 401, error: "Non authentifié." }, { status: 401 })
+  }
   try {
     const res = await fetch(CSV_URL, {
       headers: {

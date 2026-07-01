@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from "next/server"
+import { getServerUser } from "@/lib/supabase/server"
 import {
   RESPONSABLES_CSV_URL,
   RESPONSABLES_SHEET_NAME,
@@ -31,6 +32,9 @@ function emptyWithNote(note: string): NextResponse {
 }
 
 export async function GET() {
+  if (!(await getServerUser())) {
+    return NextResponse.json({ status: 401, error: "Non authentifié." }, { status: 401 })
+  }
   try {
     const res = await fetch(RESPONSABLES_CSV_URL, {
       headers: {

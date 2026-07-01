@@ -118,6 +118,11 @@ export function badRequest(error: string): NextResponse {
   return NextResponse.json({ ok: false, status: 400, error }, { status: 400 })
 }
 
+/** Réponse standard 401 « Non authentifié ». */
+export function unauthorized(): NextResponse {
+  return NextResponse.json({ ok: false, status: 401, error: "Non authentifié." }, { status: 401 })
+}
+
 // ─── Helpers internes ─────────────────────────────────────────────────────────
 
 function sleep(ms: number) {

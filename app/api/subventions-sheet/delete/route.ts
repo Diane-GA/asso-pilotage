@@ -6,11 +6,14 @@
 //          (via Apps Script Web App).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { badRequest, callSheetsWebApp, mutationResponse } from "@/lib/sheets-webapp"
+import { getServerUser } from "@/lib/supabase/server"
+import { badRequest, callSheetsWebApp, mutationResponse, unauthorized } from "@/lib/sheets-webapp"
 
 interface DeleteRequest { id: string }
 
 export async function POST(req: Request) {
+  if (!(await getServerUser())) return unauthorized()
+
   let body: DeleteRequest
   try {
     body = (await req.json()) as DeleteRequest

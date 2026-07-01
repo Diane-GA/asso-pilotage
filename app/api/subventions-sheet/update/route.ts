@@ -7,11 +7,14 @@
 //          (via Apps Script Web App). Au moins un de ces champs doit être fourni.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { badRequest, callSheetsWebApp, mutationResponse } from "@/lib/sheets-webapp"
+import { getServerUser } from "@/lib/supabase/server"
+import { badRequest, callSheetsWebApp, mutationResponse, unauthorized } from "@/lib/sheets-webapp"
 
 interface UpdateRequest { id: string; statut?: string; responsable?: string; atelier?: string; bilan?: boolean }
 
 export async function POST(req: Request) {
+  if (!(await getServerUser())) return unauthorized()
+
   let body: UpdateRequest
   try {
     body = (await req.json()) as UpdateRequest
