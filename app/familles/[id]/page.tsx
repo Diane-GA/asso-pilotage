@@ -152,10 +152,12 @@ export default function FicheFamillePage({ params }: { params: Promise<{ id: str
         {contactPrincipal && (
           <div className="mt-4 pt-4 border-t border-border">
             <p className="text-xs text-muted mb-0.5">Contact principal</p>
-            <p className="text-sm font-medium text-foreground">{contactPrincipal.Prenom} {contactPrincipal.Nom}</p>
-            <p className="text-xs text-muted mt-0.5">
-              {[contactPrincipal.Telephone, contactPrincipal.Email].filter(Boolean).join("  ·  ") || "Aucune coordonnée"}
-            </p>
+            <Link
+              href={`/familles/${id}/membre/${contactPrincipal.ID_Membre}`}
+              className="text-sm font-medium text-familles-dark hover:underline"
+            >
+              {contactPrincipal.Prenom} {contactPrincipal.Nom}
+            </Link>
           </div>
         )}
       </div>
