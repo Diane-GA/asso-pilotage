@@ -28,7 +28,7 @@ const navItems = [
   { href: "/familles",      label: "Familles",         icon: UserCheck,       accent: "bg-familles-light text-familles-dark",           dot: "bg-familles" },
   { href: "/positionnement", label: "Test de positionnement", icon: GraduationCap, accent: "bg-positionnement-light text-positionnement-dark", dot: "bg-positionnement" },
   { href: "/communication", label: "Communication",   icon: Megaphone,       accent: "bg-communication-light text-communication-dark", dot: "bg-communication" },
-  { href: "/membres",       label: "Membres",         icon: UserCog,         accent: "bg-slate-100 text-slate-700",                   dot: "bg-slate-500" },
+  { href: "/membres",       label: "Équipe",          icon: UserCog,         accent: "bg-slate-100 text-slate-700",                   dot: "bg-slate-500" },
 ]
 
 export default function Sidebar() {

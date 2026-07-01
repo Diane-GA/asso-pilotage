@@ -101,7 +101,7 @@ export default function MembresPage() {
     <div className="p-8 max-w-5xl mx-auto">
       <header className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Membres</h1>
+          <h1 className="text-2xl font-bold text-foreground">Équipe</h1>
           <p className="text-sm text-muted mt-1">Équipe, formatrices, bénévoles et coordinatrices</p>
         </div>
         <button onClick={openNew} className="flex items-center gap-1.5 text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors">
