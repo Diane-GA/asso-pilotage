@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -7,7 +8,6 @@ import {
   Euro,
   BookOpen,
   Megaphone,
-  Heart,
   ClipboardCheck,
   UserCircle,
   LogOut,
@@ -44,9 +44,7 @@ export default function Sidebar() {
   return (
     <aside className="w-60 min-h-screen bg-surface border-r border-border flex flex-col shrink-0" aria-label="Menu principal">
       <div className="p-5 border-b border-border flex items-center gap-2.5">
-        <span className="bg-brand text-white rounded-lg p-1.5">
-          <Heart size={16} />
-        </span>
+        <Image src="/logo-area.png" alt="" width={28} height={28} className="rounded-lg" />
         <span className="font-semibold text-foreground text-sm tracking-wide">AREA Nantes</span>
       </div>
 
