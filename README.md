@@ -89,8 +89,7 @@ Nécessite un fichier **`.env.local`** avec `GOOGLE_CLIENT_EMAIL` et `GOOGLE_PRI
 | Table | Rôle |
 |---|---|
 | `ATELIER` | 1 ligne = 1 atelier-groupe (`Categorie` = type, `Groupe` = niveau, dates, mode de groupage, organisation…) |
-| `ATELIER_BENEFICIAIRE` | jointure atelier ↔ élève/parent (→ `PERSONNE`) |
-| `ATELIER_INTERVENANT` | jointure atelier ↔ animateur (+ heures) (→ `INTERVENANT`) |
+| `ATELIER_PARTICIPANT` | jointure atelier ↔ participant, colonne `Role` (`Beneficiaire` → `PERSONNE` / `Intervenant` → `INTERVENANT`) + `Heures`/`Fonction` pour les intervenants |
 | `INTERVENANT` | membres de l'asso : enseignantes FLE / stagiaires FLE / bénévoles / salariées |
 
 ### ✅ Fait
