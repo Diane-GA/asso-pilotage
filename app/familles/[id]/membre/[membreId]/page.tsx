@@ -309,15 +309,13 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Documents */}
-      <div className="bg-surface border border-border rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-semibold text-foreground mb-3">
-          Documents
-          {documents.length > 0 && <span className="ml-2 text-xs font-normal text-muted">({documents.length})</span>}
-        </h2>
-        {documents.length === 0 ? (
-          <p className="text-sm text-muted italic">Aucun document. Cliquez sur « Ajouter un document » en haut pour en ajouter.</p>
-        ) : (
+      {/* Documents — affiché uniquement s'il y en a */}
+      {documents.length > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-5 mb-6">
+          <h2 className="text-sm font-semibold text-foreground mb-3">
+            Documents
+            <span className="ml-2 text-xs font-normal text-muted">({documents.length})</span>
+          </h2>
           <ul className="space-y-2">
             {documents.map(doc => (
               <li key={doc.ID_Doc} className="flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-4 py-2.5">
@@ -334,8 +332,8 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Journal : commentaires + appels + emails */}
       <JournalSuivi notes={membre.Notes} onSave={handleSaveNotes} />
@@ -377,8 +375,6 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1.5 text-xs text-muted flex-wrap">
-                    <span>Payé <span className="font-medium text-foreground">{paye} €</span></span>
-                    <span>·</span>
                     {enEdition ? (
                       <span className="flex items-center gap-1.5">
                         Attendu
@@ -402,6 +398,33 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Liste des paiements (modifiable) */}
+        {paiements.length > 0 && (
+          <div className="space-y-2">
+            {paiements.map(p => (
+              <div key={p.ID_Paiement} className="flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-sm font-bold text-familles-dark shrink-0">
+                    {p.Montant ? `${p.Montant} €` : "—"}
+                  </span>
+                  {p.Mode_Paiement && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-familles-light text-familles-dark">
+                      {p.Mode_Paiement}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <p className="text-sm font-medium text-foreground">{p.Date_Paiement || "—"}</p>
+                  <button onClick={() => openEditPaiement(p)} aria-label="Modifier ce paiement" title="Modifier"
+                    className="p-1.5 rounded-lg text-muted hover:text-familles-dark hover:bg-familles-light transition-colors">
+                    <Pencil size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
