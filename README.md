@@ -1,7 +1,7 @@
 # Asso Pilotage
 
 Dashboard de pilotage pour une association de formation numérique (Ada Tech School).
-**Next.js 16.2.6 · React 19 · Tailwind v4 · TypeScript · localStorage**
+**Next.js 16.2.6 · React 19 · Tailwind v4 · TypeScript · localStorage** *(module Familles : Google Sheets API REST v4)*
 
 🌐 **Production** : [asso-inky.vercel.app](https://asso-inky.vercel.app)
 📦 **Repo** : [github.com/anais0210/asso-pilotage](https://github.com/anais0210/asso-pilotage)
@@ -49,6 +49,7 @@ Pour comprendre pourquoi les choses sont faites ainsi.
 - [ADR 001 — Pas de backend (localStorage first)](docs/explanation/adr/001-no-backend.md)
 - [ADR 002 — Tailwind v4 CSS-first](docs/explanation/adr/002-tailwind-v4-css-first.md)
 - [ADR 003 — Auth localStorage](docs/explanation/adr/003-auth-localstorage.md)
+- [ADR 004 — Intégration Google Sheets (module Familles, API REST v4)](docs/explanation/adr/004-google-sheets-integration.md)
 
 ---
 
@@ -61,6 +62,7 @@ Pour comprendre pourquoi les choses sont faites ainsi.
 | Absences | `/absences` | Suivi + appels parents |
 | Assiduité | `/assiduite` | Hub assiduité global par atelier |
 | Bénéficiaires | `/beneficiaires` | Hub Élèves / Parents unifié (CRUD + droits image) |
+| Familles | `/familles` | Familles & membres — **Google Sheets** (paiements, documents Drive, suivi) |
 | Finances | `/finances` | Demandes + inscriptions |
 | Ateliers | `/ateliers` | Planning, notes, groupes |
 | Communication | `/communication` | Calendrier éditorial + kanban IA (Claude) |

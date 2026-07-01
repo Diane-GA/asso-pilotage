@@ -74,6 +74,8 @@ asso/
 │   ├── communication/page.tsx
 │   ├── benevoles/page.tsx
 │   ├── membres/page.tsx
+│   ├── familles/…            ← module Familles (backend Google Sheets, pas localStorage)
+│   ├── api/sheets/route.ts   ← API REST Google Sheets v4 (module Familles)
 │   └── roadmap/page.tsx
 ├── components/
 │   ├── AuthGate.tsx         ← protection routes + sidebar conditionnelle
@@ -85,7 +87,9 @@ asso/
 │   ├── auth-context.tsx     ← AuthProvider + useAuth()
 │   ├── mock-data.ts         ← données initiales tous modules
 │   ├── emargement-data.ts   ← séances + présences types
-│   └── roadmap-data.ts      ← 6 thèmes, 16 use cases, 43 sous-actions
+│   ├── roadmap-data.ts      ← 6 thèmes, 16 use cases, 43 sous-actions
+│   ├── sheets-api.ts        ← client module Familles (fetch → /api/sheets)
+│   └── google-sheets-server.ts ← clients Sheets + Drive (compte de service)
 ├── docs/                    ← documentation Diataxis
 ├── CLAUDE.md                ← contexte IA
 ├── AGENTS.md                ← avertissements techniques
@@ -107,6 +111,24 @@ asso/
 | `asso-membres` | `Membre[]` | membres/page.tsx |
 | `asso-presences` | `Record<seanceId, Record<apprenanteId, PresenceStatus>>` | emargement/page.tsx |
 | `asso-roadmap-statuses` | `Record<subActionId, Status>` | roadmap/page.tsx |
+
+## Exception : module Familles (Google Sheets)
+
+Le module **Familles** ne suit PAS le pattern localStorage ci-dessus. Il lit/écrit
+dans **Google Sheets** via une API REST v4 côté serveur (voir ADR 004 et CLAUDE.md
+→ « Backend Familles »).
+
+```
+Pages familles
+  → lib/sheets-api.ts          (client, fetch vers /api/sheets)
+  → app/api/sheets/route.ts    (route serveur, routeur par "action")
+  → lib/google-sheets-server.ts (clients Sheets + Drive, compte de service)
+  → Google Sheet "BDD_Asso_CRM" + Google Drive (documents)
+```
+
+- Auth : **compte de service** (`GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY`), scopes `spreadsheets` + `drive`.
+- Tables : FAMILLE / PERSONNE / INSCRIPTION / PAIEMENT / EVALUATION / DOCUMENTS JOINTS…
+- Aucune clé localStorage pour ce module.
 
 ## Conventions de nommage
 

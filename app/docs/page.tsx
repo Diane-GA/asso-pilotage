@@ -128,7 +128,7 @@ const categories: DocCategory[] = [
         label: "ADR 004 — Google Sheets",
         badge: "ADR",
         badgeColor: "bg-slate-100 text-slate-600",
-        description: "Options d'intégration : Apps Script, Supabase ou export/import CSV — décision en 3 phases.",
+        description: "Intégration Google Sheets — API REST v4 côté serveur (compte de service) retenue, implémentée pour le module Familles.",
       },
     ],
   },
