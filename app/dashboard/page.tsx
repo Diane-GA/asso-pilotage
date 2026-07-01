@@ -8,7 +8,7 @@ import {
   UserCheck, BarChart2, ClipboardCheck, Euro, BookOpen, Megaphone, UserCog, GraduationCap,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { ROLE_LABELS } from "@/lib/auth"
+import { moduleForPath } from "@/lib/modules"
 
 // ──────────────────────────────────────────────
 // Tableau de bord "lanceur" : une carte par module (icône + libellé).
@@ -51,7 +51,14 @@ export default function DashboardPage() {
 
   if (!user) return null
 
-  const cards = modules.filter((m) => !m.superAdminOnly || user.role === "super_admin")
+  // N'affiche que les cartes autorisées : Mon compte toujours, l'Équipe si
+  // administratrice, les modules selon les permissions de la personne.
+  const cards = modules.filter((m) => {
+    if (m.href === "/compte") return true
+    if (m.href === "/membres") return user.isAdmin === true
+    const key = moduleForPath(m.href)
+    return key ? (user.modules ?? []).includes(key) : true
+  })
 
   return (
     <div className="p-6 sm:p-10 max-w-5xl mx-auto">
@@ -75,7 +82,7 @@ export default function DashboardPage() {
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-medium text-foreground truncate">{user.prenom} {user.nom}</span>
-              <span className="block text-[11px] text-muted truncate">{ROLE_LABELS[user.role]}</span>
+              <span className="block text-[11px] text-muted truncate">{user.isAdmin ? "Administratrice" : "Membre de l'équipe"}</span>
             </span>
           </Link>
           <button
