@@ -190,7 +190,7 @@ IDs réservés : 9001–9099. Supprimer ce fichier + le dossier `app/dev/` avant
 - ❌ Ne pas créer `tailwind.config.ts` — config dans `globals.css`
 - ❌ Ne pas importer `Linkedin`, `Instagram`, `Facebook`, `Kanban` de lucide-react (n'existent pas en v1.16.0)
 - ❌ Ne pas utiliser `bg-[var(--color-xxx)]` — utiliser `bg-xxx`
-- ❌ Ne pas créer de routes API (`app/api/`) sans décision d'équipe — exceptions validées : `app/api/generate-post/route.ts` (génération IA), `app/api/sheets/route.ts` (backend Google Sheets du module Familles), `app/api/ocr/route.ts` (OCR bulletins d'inscription via Gemini API)
+- ❌ Ne pas créer de routes API (`app/api/`) sans décision d'équipe — exceptions validées : `app/api/generate-post/route.ts` (génération IA), `app/api/sheets/route.ts` (backend Google Sheets du module Familles), `app/api/ocr/route.ts` (OCR bulletins d'inscription via Gemini API), `app/api/subventions-sheet/*` (backend Google Sheets de la Veille subventions : lecture CSV + écriture via Web App Apps Script — nécessite `SHEETS_WEBAPP_URL` + `SHEETS_WEBAPP_TOKEN`)
 - ❌ Ne pas mettre de données dans l'URL (PII)
 - ❌ Ne pas casser le pattern SlideOver existant (cohérence UX)
 
