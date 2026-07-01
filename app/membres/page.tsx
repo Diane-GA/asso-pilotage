@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import SlideOver, { Field, Input, Select, Textarea, FormRow, SaveButton, DeleteButton } from "@/components/SlideOver"
-import { Plus, Pencil, Search, UserCheck, UserX, Users, ShieldCheck } from "lucide-react"
+import { Plus, Pencil, UserCheck, UserX, Users, ShieldCheck } from "lucide-react"
 import { type StatutMembre, type AuthUser } from "@/lib/auth"
 import { MODULES, MODULE_PRESETS, ALL_MODULE_KEYS, type ModuleKey } from "@/lib/modules"
 import { fetchAllUsers, adminCreateUser, adminUpdateUser, adminDeleteUser } from "@/lib/auth-client"
@@ -57,7 +57,6 @@ const emptyForm = (): FormState => ({
 export default function MembresPage() {
   const [membres, setMembres] = useState<AuthUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch]   = useState("")
   const [slideOpen, setSlideOpen] = useState(false)
   const [editing,   setEditing]   = useState<AuthUser | null>(null)
   const [form,      setForm]      = useState<FormState>(emptyForm())
@@ -165,12 +164,6 @@ export default function MembresPage() {
   const admins    = membres.filter((m) => m.isAdmin === true).length
   const enAttente = membres.filter((m) => m.statut === "en attente").length
 
-  // Filtre (recherche)
-  const filtered = membres.filter((m) => {
-    const q = search.toLowerCase()
-    return !q || `${m.prenom} ${m.nom} ${m.email}`.toLowerCase().includes(q)
-  })
-
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <header className="mb-8 flex items-start justify-between">
@@ -199,31 +192,19 @@ export default function MembresPage() {
         </div>
       </div>
 
-      {/* Recherche */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un membre…"
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-ateliers/30 focus:border-ateliers"
-          />
-        </div>
-      </div>
-
       {/* Liste */}
       <section className="bg-surface rounded-xl border border-border overflow-hidden">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-foreground text-sm flex items-center gap-2"><Users size={14} /> {filtered.length} membre{filtered.length > 1 ? "s" : ""}</h2>
+          <h2 className="font-semibold text-foreground text-sm flex items-center gap-2"><Users size={14} /> {membres.length} membre{membres.length > 1 ? "s" : ""}</h2>
         </div>
 
         {loading ? (
           <p className="text-center text-sm text-muted py-8 italic">Chargement…</p>
-        ) : filtered.length === 0 ? (
+        ) : membres.length === 0 ? (
           <p className="text-center text-sm text-muted py-8 italic">Aucun membre trouvé</p>
         ) : (
           <ul className="divide-y divide-border">
-            {filtered.map((m) => {
+            {membres.map((m) => {
               const nbAcces = m.isAdmin ? ALL_MODULE_KEYS.length : (m.modules?.length ?? 0)
               return (
                 <li key={m.id} className="px-5 py-4 flex items-center gap-4 hover:bg-slate-50 group">
