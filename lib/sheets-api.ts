@@ -60,6 +60,7 @@ export interface InscriptionSheet {
   Date_Inscription: string
   Beneficiaire: string
   Montant_Adhesion: string | number
+  Montant_Inscription?: string | number
   Montant_Du?: string | number
   Remarques: string
 }

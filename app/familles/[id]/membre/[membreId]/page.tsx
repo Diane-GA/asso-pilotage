@@ -70,8 +70,9 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
   const [payOpen, setPayOpen]   = useState(false)
   const [payEditing, setPayEditing] = useState(false)
   const [payForm, setPayForm]   = useState<Partial<PaiementSheet>>({})
-  const [editAttenduId, setEditAttenduId] = useState<string | null>(null)
-  const [attenduDraft, setAttenduDraft] = useState("")
+  const [montantOpen, setMontantOpen] = useState(false)
+  const [montantInscId, setMontantInscId] = useState("")
+  const [montantForm, setMontantForm] = useState({ Montant_Adhesion: "", Montant_Inscription: "" })
   const [docOpen, setDocOpen]   = useState(false)
   const [docType, setDocType]   = useState("")
   const [docFile, setDocFile]   = useState<File | null>(null)
@@ -149,10 +150,13 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
     setPayOpen(false)
   }
 
-  async function handleSaveAttendu(idInscription: string) {
-    await updateInscription(idInscription, { Montant_Du: attenduDraft })
+  async function handleSaveMontants() {
+    await updateInscription(montantInscId, {
+      Montant_Adhesion: montantForm.Montant_Adhesion,
+      Montant_Inscription: montantForm.Montant_Inscription,
+    })
     await loadData()
-    setEditAttenduId(null)
+    setMontantOpen(false)
   }
 
   function openDocument() {
@@ -340,6 +344,69 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
       {/* Journal : commentaires + appels + emails */}
       <JournalSuivi notes={membre.Notes} onSave={handleSaveNotes} />
 
+      {/* Inscriptions */}
+      <div className="bg-surface border border-border rounded-xl p-5 mb-6">
+        <h2 className="text-sm font-semibold text-foreground mb-3">
+          Inscriptions
+          {inscriptions.length > 0 && <span className="ml-2 text-xs font-normal text-muted">({inscriptions.length})</span>}
+        </h2>
+        {inscriptions.length === 0 ? (
+          <p className="text-sm text-muted italic">Aucune inscription enregistrée.</p>
+        ) : (
+          <ul className="space-y-2">
+            {inscriptions.map(insc => {
+              const montantDu = (Number(insc.Montant_Adhesion) || 0) + (Number(insc.Montant_Inscription) || 0)
+              return (
+                <li key={insc.ID_Inscription} className="rounded-lg border border-border px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-sm font-semibold text-foreground">{insc.Annee_Scolaire || "—"}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {insc.Date_Inscription && (
+                        <span className="text-xs text-muted">{insc.Date_Inscription}</span>
+                      )}
+                      {insc.Statut && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          insc.Statut.toUpperCase().includes("COURS")   ? "bg-finances-light text-finances-dark"  :
+                          insc.Statut.toUpperCase().includes("SUSPEN")  ? "bg-ateliers-light text-ateliers-dark"  :
+                          insc.Statut.toUpperCase().includes("ARRET")   ? "bg-absences-light text-absences-dark"  :
+                          "bg-slate-100 text-slate-600"
+                        }`}>
+                          {insc.Statut}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
+                    <p className="text-xs text-muted">
+                      Montant dû : <span className="font-semibold text-foreground">{montantDu} €</span>
+                      <span className="ml-2 text-slate-400">
+                        (adhésion {Number(insc.Montant_Adhesion) || 0} € + inscription {Number(insc.Montant_Inscription) || 0} €)
+                      </span>
+                    </p>
+                    <button
+                      onClick={() => {
+                        setMontantInscId(insc.ID_Inscription)
+                        setMontantForm({
+                          Montant_Adhesion: String(insc.Montant_Adhesion ?? ""),
+                          Montant_Inscription: String(insc.Montant_Inscription ?? "30"),
+                        })
+                        setMontantOpen(true)
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-familles-dark hover:underline"
+                    >
+                      <Pencil size={12} /> Modifier les montants
+                    </button>
+                  </div>
+                  {insc.Remarques && (
+                    <p className="text-xs text-muted mt-1.5">{insc.Remarques}</p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
       {/* Paiements */}
       <div className="bg-surface border border-border rounded-xl p-5 mb-6">
         <div className="flex items-center justify-between mb-4 gap-2">
@@ -362,15 +429,13 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
               const paye = paiements
                 .filter(p => p.ID_Inscription === insc.ID_Inscription)
                 .reduce((s, p) => s + (Number(p.Montant) || 0), 0)
-              const attenduDefini = insc.Montant_Du !== undefined && insc.Montant_Du !== "" && insc.Montant_Du !== null
-              const attendu = Number(insc.Montant_Du) || 0
+              const attendu = (Number(insc.Montant_Adhesion) || 0) + (Number(insc.Montant_Inscription) || 0)
               const reste = attendu - paye
-              const enEdition = editAttenduId === insc.ID_Inscription
               return (
                 <div key={insc.ID_Inscription} className="rounded-lg border border-border px-4 py-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="text-sm font-semibold text-foreground">{insc.Annee_Scolaire || "Inscription"}</p>
-                    {attenduDefini && (
+                    {attendu > 0 && (
                       reste > 0
                         ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-absences-light text-absences-dark">Reste à payer {reste} €</span>
                         : <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-finances-light text-finances-dark">Soldé</span>
@@ -379,25 +444,7 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
                   <div className="flex items-center gap-2 mt-1.5 text-xs text-muted flex-wrap">
                     <span>Payé <span className="font-medium text-foreground">{paye} €</span></span>
                     <span>·</span>
-                    {enEdition ? (
-                      <span className="flex items-center gap-1.5">
-                        Attendu
-                        <input type="number" autoFocus value={attenduDraft}
-                          onChange={e => setAttenduDraft(e.target.value)}
-                          className="w-20 px-2 py-1 rounded-lg border border-border text-sm" />
-                        <button onClick={() => handleSaveAttendu(insc.ID_Inscription)} className="text-familles-dark font-medium hover:underline">OK</button>
-                        <button onClick={() => setEditAttenduId(null)} className="text-muted hover:underline">Annuler</button>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        Attendu <span className="font-medium text-foreground">{attenduDefini ? `${attendu} €` : "non défini"}</span>
-                        <button
-                          onClick={() => { setEditAttenduId(insc.ID_Inscription); setAttenduDraft(attenduDefini ? String(attendu) : "") }}
-                          className="text-familles-dark hover:text-familles-dark" aria-label="Modifier le montant attendu" title="Modifier le montant attendu">
-                          <Pencil size={12} />
-                        </button>
-                      </span>
-                    )}
+                    <span>Attendu <span className="font-medium text-foreground">{attendu} €</span></span>
                   </div>
                 </div>
               )
@@ -441,6 +488,35 @@ export default function FicheMembrePage({ params }: { params: Promise<{ id: stri
           </Field>
           <SaveButton />
           {payEditing && <DeleteButton onClick={handleDeletePaiement} />}
+        </form>
+      </SlideOver>
+
+      {/* SlideOver montants */}
+      <SlideOver open={montantOpen} onClose={() => setMontantOpen(false)} title="Modifier les montants" width="md">
+        <form onSubmit={e => { e.preventDefault(); handleSaveMontants() }} className="flex flex-col gap-4">
+          <Field label="Montant d'adhésion (€)">
+            <Input
+              type="number"
+              value={montantForm.Montant_Adhesion}
+              onChange={e => setMontantForm(f => ({ ...f, Montant_Adhesion: e.target.value }))}
+              placeholder="0"
+            />
+          </Field>
+          <Field label="Montant d'inscription (€)">
+            <Input
+              type="number"
+              value={montantForm.Montant_Inscription}
+              onChange={e => setMontantForm(f => ({ ...f, Montant_Inscription: e.target.value }))}
+              placeholder="30"
+            />
+          </Field>
+          <div className="px-3 py-2.5 rounded-xl bg-slate-50 border border-border text-sm text-muted">
+            Total dû :{" "}
+            <span className="font-semibold text-foreground">
+              {(Number(montantForm.Montant_Adhesion) || 0) + (Number(montantForm.Montant_Inscription) || 0)} €
+            </span>
+          </div>
+          <SaveButton />
         </form>
       </SlideOver>
 

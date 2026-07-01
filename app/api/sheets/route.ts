@@ -354,6 +354,7 @@ async function addMembre(sheets: Sheets, data: Record<string, unknown>) {
       "Niveau / Classe": data.Niveau ?? "",
       "Orientation": data.Source_Orientation ?? "",
       "Date d'inscription": new Date().toISOString().split("T")[0],
+      "Montant d'inscription": 30,
     })
   }
 
@@ -469,6 +470,10 @@ async function updateInscription(sheets: Sheets, idInscription: string, data: Re
     map["Montant du"] = data.Montant_Du
   }
   if (data.Montant_Adhesion !== undefined) map["Montant adhesion"] = data.Montant_Adhesion
+  if (data.Montant_Inscription !== undefined) {
+    await ensureColumn(sheets, "INSCRIPTION", "Montant d'inscription")
+    map["Montant d'inscription"] = data.Montant_Inscription
+  }
   if (data.Statut !== undefined)           map["Statut"] = data.Statut
   if (data.Niveau !== undefined)           map["Niveau / Classe"] = data.Niveau
   const ok = await updateRowById(sheets, "INSCRIPTION", idInscription, map)
@@ -614,6 +619,7 @@ function mapInscription(i: Record<string, unknown>) {
     Date_Inscription: fmtDate(i["Date d'inscription"] as string),
     Beneficiaire: i["Beneficiaire"],
     Montant_Adhesion: i["Montant adhesion"],
+    Montant_Inscription: i["Montant d'inscription"] !== undefined && i["Montant d'inscription"] !== "" ? i["Montant d'inscription"] : "",
     Montant_Du: i["Montant du"] !== undefined && i["Montant du"] !== "" ? i["Montant du"] : "",
     Remarques: i["Remarques"],
   }
