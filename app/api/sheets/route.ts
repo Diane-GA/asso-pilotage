@@ -521,7 +521,7 @@ async function addMembre(sheets: Sheets, data: Record<string, unknown>) {
       "Personne ID": id,
       "Annee scolaire": data.Annee_Scolaire ?? "",
       "Type apprenant": isEnfant ? "Soutien scolaire" : "FLE",
-      "Statut": "En cours",
+      "Statut": "EN COURS",
       "Niveau / Classe": isEnfant ? (data.Niveau ?? "") : "",
       "Disponibilite": data.Disponibilite ?? "",
       "Orientation": data.Source_Orientation ?? "",
@@ -572,10 +572,18 @@ async function updateMembre(sheets: Sheets, idMembre: string, data: Record<strin
     const inscriptions = await sheetToObjects(sheets, "INSCRIPTION")
     const persoInsc = inscriptions.filter((i) => String(i["Personne ID"]) === String(idMembre))
 
+    // Le formulaire d'édition envoie ces clés à "" pour un membre sans
+    // inscription (Beneficiaire = Non) : ne créer une ligne INSCRIPTION
+    // que si au moins une valeur est réellement renseignée.
+    const hasValeurInscription = [
+      data.Statut_Inscription, data.Niveau, data.Type_Apprenant,
+      data.Source_Orientation, data.Date_Inscription,
+    ].some((v) => v !== undefined && String(v).trim() !== "")
+
     if (persoInsc.length > 0) {
       const latest = persoInsc[persoInsc.length - 1]
       await updateRowById(sheets, "INSCRIPTION", String(latest["ID"]), imap)
-    } else {
+    } else if (hasValeurInscription) {
       const inscId = await nextId(sheets, "INSCRIPTION")
       await appendRow(sheets, "INSCRIPTION", {
         "ID": inscId,

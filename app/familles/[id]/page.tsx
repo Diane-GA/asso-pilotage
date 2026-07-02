@@ -10,6 +10,7 @@ import DateInput from "@/components/DateInput"
 import { ChevronRight, Pencil, Plus, Upload, RotateCcw } from "lucide-react"
 import {
   fetchFamilles, fetchMembres, updateFamille, addMembre, deleteMembre, uploadFichier,
+  getCurrentAnneeScolaire, getAnneeScolaireOptions,
   type FamilleSheet, type MembreSheet
 } from "@/lib/sheets-api"
 
@@ -63,7 +64,7 @@ const emptyMembre = (idFamille: string): Partial<MembreSheet> => ({
   Genre: "", Telephone: "", Email: "",
   Langue_Maternelle: "", Pays_Origine: "",
   Beneficiaire: "Non",
-  Annee_Scolaire: "", Niveau: "", Disponibilite: "", Source_Orientation: "",
+  Annee_Scolaire: getCurrentAnneeScolaire(), Niveau: "", Disponibilite: "", Source_Orientation: "",
   Montant_Adhesion: "", Montant_Inscription: "30", Remarques: "",
 })
 
@@ -387,7 +388,9 @@ export default function FicheFamillePage({ params }: { params: Promise<{ id: str
               <p className="text-xs font-semibold text-familles-dark uppercase tracking-wide">Inscription</p>
               <FormRow>
                 <Field label="Année scolaire">
-                  <Input value={String(membreForm.Annee_Scolaire ?? "")} onChange={e => setMembreForm(f => ({ ...f, Annee_Scolaire: e.target.value }))} placeholder="ex. 2025-2026" />
+                  <Select value={String(membreForm.Annee_Scolaire ?? "")} onChange={e => setMembreForm(f => ({ ...f, Annee_Scolaire: e.target.value }))}>
+                    {getAnneeScolaireOptions().map(y => <option key={y} value={y}>{y}</option>)}
+                  </Select>
                 </Field>
                 <Field label="Type d'apprenant">
                   <Input value={membreForm.Role === "Enfant" ? "Soutien scolaire" : "FLE"} readOnly className="bg-slate-50 text-muted" />
