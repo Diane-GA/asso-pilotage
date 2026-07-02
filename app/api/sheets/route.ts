@@ -511,20 +511,24 @@ async function addMembre(sheets: Sheets, data: Record<string, unknown>) {
     "Commentaire": data.Notes ?? "",
   })
 
-  if (data.Niveau || data.Statut_Inscription || data.Date_Inscription) {
+  // Une inscription n'est créée que si la personne est bénéficiaire.
+  // Statut, Type apprenant et Date d'inscription sont déterminés automatiquement.
+  if (String(data.Beneficiaire) === "Oui") {
     const inscId = await nextId(sheets, "INSCRIPTION")
+    const isEnfant = String(data.Role) === "Enfant"
     await appendRow(sheets, "INSCRIPTION", {
       "ID": inscId,
       "Personne ID": id,
       "Annee scolaire": data.Annee_Scolaire ?? "",
-      "Type apprenant": data.Type_Apprenant ?? "",
-      "Statut": data.Statut_Inscription ?? "",
-      "Niveau / Classe": data.Niveau ?? "",
+      "Type apprenant": isEnfant ? "Soutien scolaire" : "FLE",
+      "Statut": "EN COURS",
+      "Niveau / Classe": isEnfant ? (data.Niveau ?? "") : "",
+      "Disponibilite": data.Disponibilite ?? "",
       "Orientation": data.Source_Orientation ?? "",
-      "Date d'inscription": data.Date_Inscription
-        ? parseDateFr(String(data.Date_Inscription))
-        : new Date().toISOString().split("T")[0],
-      "Montant d'inscription": 30,
+      "Date d'inscription": new Date().toISOString().split("T")[0],
+      "Montant adhesion": data.Montant_Adhesion ?? "",
+      "Montant d'inscription": data.Montant_Inscription ?? "",
+      "Remarques": data.Remarques ?? "",
     })
   }
 
@@ -568,10 +572,18 @@ async function updateMembre(sheets: Sheets, idMembre: string, data: Record<strin
     const inscriptions = await sheetToObjects(sheets, "INSCRIPTION")
     const persoInsc = inscriptions.filter((i) => String(i["Personne ID"]) === String(idMembre))
 
+    // Le formulaire d'édition envoie ces clés à "" pour un membre sans
+    // inscription (Beneficiaire = Non) : ne créer une ligne INSCRIPTION
+    // que si au moins une valeur est réellement renseignée.
+    const hasValeurInscription = [
+      data.Statut_Inscription, data.Niveau, data.Type_Apprenant,
+      data.Source_Orientation, data.Date_Inscription,
+    ].some((v) => v !== undefined && String(v).trim() !== "")
+
     if (persoInsc.length > 0) {
       const latest = persoInsc[persoInsc.length - 1]
       await updateRowById(sheets, "INSCRIPTION", String(latest["ID"]), imap)
-    } else {
+    } else if (hasValeurInscription) {
       const inscId = await nextId(sheets, "INSCRIPTION")
       await appendRow(sheets, "INSCRIPTION", {
         "ID": inscId,
